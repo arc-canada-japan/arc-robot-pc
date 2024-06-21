@@ -1,1 +1,1 @@
-# ARC Project
+# ARC Project - Local architecture
