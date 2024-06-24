@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'video_sub = video_display.video_subscriber:main',
         ],
     },
 )

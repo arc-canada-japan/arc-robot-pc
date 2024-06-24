@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'unity_commmunication'
+package_name = 'unity_communication'
 
 setup(
     name=package_name,
