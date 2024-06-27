@@ -6,5 +6,5 @@
         <param name="tcp_ip" type="string" value="$(arg tcp_ip)"/>
         <param name="tcp_port" type="int" value="$(arg tcp_port)"/>
     </node>
-    <node name="minimal_subscriber" exec="minimal_subscriber" pkg="video_display" type="video_subscriber.py" args="--wait" output="screen"/>
+    <node name="minimal_subscriber" exec="video_sub" pkg="video_display" type="video_subscriber.py" args="--wait" output="screen"/>
 </launch>
