@@ -14,8 +14,6 @@ def generate_launch_description():
         DeclareLaunchArgument('video_y', default_value='720'),
         DeclareLaunchArgument('video_device', default_value='/dev/video0'),
 
-        DeclareLaunchArgument('robot_ip', default_value='192.168.1.217'),
-
         # Server to receive the ROS command from Unity
         Node(
             package='ros_tcp_endpoint',
@@ -27,17 +25,6 @@ def generate_launch_description():
             parameters=[
                 {'tcp_ip': LaunchConfiguration('tcp_ip')},
                 {'tcp_port': LaunchConfiguration('tcp_port')}
-            ]
-        ),
-
-        # Node to command the xArm
-        Node(
-            package='robot_control',
-            executable='xarm_controller',
-            name='xarm_controller',
-            output='screen',
-            parameters=[
-                {'robot_ip': LaunchConfiguration('robot_ip')}
             ]
         ),
 
