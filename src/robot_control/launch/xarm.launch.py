@@ -1,59 +1,37 @@
+import os
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
+CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROBOT_NAME = os.path.basename(__file__).split('.')[0]
 
 def generate_launch_description():
+    minimal_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([os.path.join(
+         get_package_share_directory(CURRENT_PACKAGE), 'launch'),
+         '/minimal.launch.py'])
+    )
+
+    config = os.path.join(
+      get_package_share_directory(CURRENT_PACKAGE),
+      'config',
+      ROBOT_NAME + '.yaml'
+      )
+
     return LaunchDescription([
-        DeclareLaunchArgument('tcp_ip', default_value='0.0.0.0'),
-        DeclareLaunchArgument('tcp_port', default_value='10000'),
-
-        DeclareLaunchArgument('ffmpeg_ip', default_value='192.168.11.50'),
-        DeclareLaunchArgument('ffmpeg_port', default_value='8080'),
-        DeclareLaunchArgument('video_x', default_value='1280'),
-        DeclareLaunchArgument('video_y', default_value='720'),
-        DeclareLaunchArgument('video_device', default_value='/dev/video0'),
-
-        DeclareLaunchArgument('robot_ip', default_value='192.168.1.217'),
-
-        # Server to receive the ROS command from Unity
-        Node(
-            package='ros_tcp_endpoint',
-            executable='default_server_endpoint',
-            name='server_endpoint',
-            output='screen',
-            arguments=['--wait'],
-            respawn=True,
-            parameters=[
-                {'tcp_ip': LaunchConfiguration('tcp_ip')},
-                {'tcp_port': LaunchConfiguration('tcp_port')}
-            ]
-        ),
+        minimal_launch,       
 
         # Node to command the xArm
         Node(
-            package='robot_control',
-            executable='xarm_controller',
-            name='xarm_controller',
+            package=CURRENT_PACKAGE,
+            executable=ROBOT_NAME + '_controller',
+            name=ROBOT_NAME + '_controller',
             output='screen',
-            parameters=[
-                {'robot_ip': LaunchConfiguration('robot_ip')}
-            ]
-        ),
-
-        # Call of ffmpeg
-        Node(
-            package='robot_control',
-            executable='ffmpeg_caller',
-            name='ffmpeg_caller',
-            output='screen',
-            parameters=[
-                {'ffmpeg_ip': LaunchConfiguration('ffmpeg_ip')},
-                {'ffmpeg_port': LaunchConfiguration('ffmpeg_port')},
-                {'video_x': LaunchConfiguration('video_x')},
-                {'video_y': LaunchConfiguration('video_y')},
-                {'video_device': LaunchConfiguration('video_device')}
-            ]
+            parameters=[config]
         )
     ])
 
