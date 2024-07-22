@@ -2,7 +2,7 @@ from glob import glob
 import os
 from setuptools import find_packages, setup
 
-package_name = 'robot_control'
+package_name = CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 
 setup(
     name=package_name,
