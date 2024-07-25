@@ -7,6 +7,9 @@ from xarm.wrapper import XArmAPI
 import matplotlib.pyplot as plt # temp for test
 import matplotlib.animation as animation # temp for test
 
+RPM_TO_RAD_S = 0.10472 # mutiply with a rpm value to get the rad/s value
+RPM_TO_DEG_S = 6 # mutiply with a rpm value to get the °/s value
+
 class XarmController(Node):
 
     def __init__(self):
@@ -16,12 +19,12 @@ class XarmController(Node):
         self.declare_parameter('robot_ip', '192.168.1.217')
         ip = self.get_parameter('robot_ip').get_parameter_value().string_value
 
-        self.subscription = self.create_subscription(
+        self.joints_val_str = self.create_subscription(
             String,
             'joint_value_str',
             self.joint_print_callback,
             10)
-        self.subscription  # prevent unused variable warning
+        self.joints_val_str  # prevent unused variable warning
 
         self.emergency = self.create_subscription(
             Bool,
@@ -37,10 +40,17 @@ class XarmController(Node):
             10)
         self.joints_val  # prevent unused variable warning
 
-        self.SPEED = 50 # tr/min
-        self.SPEED = self.SPEED * 0.10472 # conversion to rad/s 
+        self.robot_joints_val_pub = self.create_publisher(Float32MultiArray, "robot_joint_values", 10)
 
-        self.arm = XArmAPI(ip, is_radian=True)
+        self.SPEED = 50 # r/min
+        self.SPEED = self.SPEED * RPM_TO_DEG_S # conversion to °/s 
+
+        try:
+            self.arm = XArmAPI(ip, is_radian=False)
+        except Exception as e:
+            self.get_logger().error("Impossible to connect to the robot: " + e)
+            exit(10)
+
         self.arm.motion_enable(enable=True)
         self.arm.set_mode(0)
         self.arm.set_state(state=0)
@@ -48,6 +58,9 @@ class XarmController(Node):
 
         self.arm_origin = self.arm.get_servo_angle()[1][:6]
         self.get_logger().info(f"ORIGIN: {self.arm_origin}")
+        temp_pub = Float32MultiArray()
+        temp_pub.data = self.arm_origin
+        self.robot_joints_val_pub.publish(temp_pub)
 
         self.graph_init()
 
@@ -90,13 +103,14 @@ class XarmController(Node):
     def robot_move_callback(self, cmd):
         self.get_logger().info(f"JOINTS: {cmd.data}") # temp for test
         try:
-            cmd_rel = Float32MultiArray()
             cmd_rel = [a - b for a, b in zip(cmd.data, self.origin)]
-            abs_cmd = Float32MultiArray()
             abs_cmd = [a + b for a, b in zip(self.arm_origin, cmd_rel)]
 
             self.get_logger().info(f"ABS CM: {abs_cmd}") # temp for test
-            #self.arm.set_servo_angle(angle=abs_cmd, speed=self.SPEED, is_radian=True, wait=True)
+            #self.arm.set_servo_angle(angle=abs_cmd, speed=self.SPEED, is_radian=False, wait=True)
+            temp_pub = Float32MultiArray()
+            temp_pub.data = cmd.data
+            self.robot_joints_val_pub.publish(temp_pub)
 
             # Add data to history
             self.history['cmd_data'].append(cmd.data)
