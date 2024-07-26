@@ -1,5 +1,7 @@
+from typing import List
 import rclpy
 from rclpy.node import Node
+from robot_control.abstract_controller import AbstractController
 
 from std_msgs.msg import String, Bool, Float32MultiArray
 from xarm.wrapper import XArmAPI
@@ -10,43 +12,23 @@ import matplotlib.animation as animation # temp for test
 RPM_TO_RAD_S = 0.10472 # mutiply with a rpm value to get the rad/s value
 RPM_TO_DEG_S = 6 # mutiply with a rpm value to get the °/s value
 
-class XarmController(Node):
+class XarmController(AbstractController):
+    """
+        This class is used to controller the xArm robot.
+        It receives the joint values from the Operator PC and moves the robot to the new joint values.
+        The values are received as a list of 6 float values, representing the joint angles in degree.
+    """
 
     def __init__(self):
-        super().__init__('xarm_controller')
-        self.get_logger().info("========= XARM CONTROLLER =========")
+        super().__init__(robot_name="xarm")
 
-        self.declare_parameter('robot_ip', '192.168.1.217')
-        ip = self.get_parameter('robot_ip').get_parameter_value().string_value
-
-        self.joints_val_str = self.create_subscription(
-            String,
-            'joint_value_str',
-            self.joint_print_callback,
-            10)
-        self.joints_val_str  # prevent unused variable warning
-
-        self.emergency = self.create_subscription(
-            Bool,
-            'emergency_stop',
-            self.emergency_stop_callback,
-            10)
-        self.emergency  # prevent unused variable warning
-
-        self.joints_val = self.create_subscription(
-            Float32MultiArray,
-            'joint_value',
-            self.robot_move_callback,
-            10)
-        self.joints_val  # prevent unused variable warning
-
-        self.robot_joints_val_pub = self.create_publisher(Float32MultiArray, "robot_joint_values", 10)
+        self.declare_ros_parameters()
 
         self.SPEED = 50 # r/min
         self.SPEED = self.SPEED * RPM_TO_DEG_S # conversion to °/s 
 
         try:
-            self.arm = XArmAPI(ip, is_radian=False)
+            self.arm = XArmAPI(self.ip, is_radian=False)
         except Exception as e:
             self.get_logger().error("Impossible to connect to the robot: " + e)
             exit(10)
@@ -56,94 +38,63 @@ class XarmController(Node):
         self.arm.set_state(state=0)
         #self.arm.reset(wait=True)
 
-        self.arm_origin = self.arm.get_servo_angle()[1][:6]
-        self.get_logger().info(f"ORIGIN: {self.arm_origin}")
+        self.INIT_POS = self.arm.get_servo_angle()[1][:self.JOINTS_NUMBER]
+        self.get_logger().info(f"INIT_POS: {self.INIT_POS}")
+
         temp_pub = Float32MultiArray()
-        temp_pub.data = self.arm_origin
+        temp_pub.data = self.INIT_POS
         self.robot_joints_val_pub.publish(temp_pub)
 
-        self.graph_init()
+    def declare_ros_parameters(self):
+        # Get the robot IP address from the parameter send by the launch file
+        self.declare_parameter('robot_ip', '192.168.1.217')
+        self.ip = self.get_parameter('robot_ip').get_parameter_value().string_value
 
-    def graph_init(self):
-        self.history = {'cmd_data': [], 'cmd_rel': [], 'abs_cmd': []}
-        # Set up the figure and axis for real-time plotting
-        self.fig, self.ax = plt.subplots(figsize=(10, 6))
-        self.lines = {}
-        joints = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6']
-        self.time_steps = list(range(1, len(joints) + 1))
-
-        self.lines['cmd_data'], = self.ax.plot([], [], label='cmd.data', marker='o')
-        self.lines['cmd_rel'], = self.ax.plot([], [], label='cmd_rel', marker='x')
-        self.lines['abs_cmd'], = self.ax.plot([], [], label='abs_cmd', marker='s')
-
-        self.ax.set_xlabel('Joint')
-        self.ax.set_ylabel('Angle (radian)')
-        self.ax.set_xticks(self.time_steps)
-        self.ax.set_xticklabels(joints)
-        self.ax.set_title(f'Joint Angles over Time\narm_origin: {self.arm_origin}\norigin: xxxx')
-        self.ax.legend()
-        self.ax.grid(True)
-
-        plt.ion()
-        plt.show()
-        self.get_logger().info(f"SHOW")
-
-
-    def joint_print_callback(self, msg):
-        #self.get_logger().info('"%s"' % msg.data)
-        pass
+        self.declare_parameter('robot_home_position', [0.0] * self.JOINTS_NUMBER)
+        self.HOME_POS = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
 
     def emergency_stop_callback(self, msg):
+        """
+            This function is called when an emergency stop is requested.
+            It stops the robot if the message is True.
+        """
         self.get_logger().info(f"Emergency stop: {msg.data}")
         if msg.data:
             self.arm.emergency_stop()
         else:
             self.arm.set_state(state=0)
 
-    def robot_move_callback(self, cmd):
+    def robot_joints_callback(self, cmd):
+        """
+            This function is called when a new joint value is received from the Operator PC.
+            It computes the robot joint values regarding the initial position of the robot,
+            and it moves the robot to the new joint values.
+        """
         self.get_logger().info(f"JOINTS: {cmd.data}") # temp for test
         try:
-            cmd_rel = [a - b for a, b in zip(cmd.data, self.origin)]
-            abs_cmd = [a + b for a, b in zip(self.arm_origin, cmd_rel)]
+            cmd_rel = [a - b for a, b in zip(cmd.data, self.origin_command_device)]
+            abs_cmd = [a + b for a, b in zip(self.INIT_POS, cmd_rel)]
 
             self.get_logger().info(f"ABS CM: {abs_cmd}") # temp for test
-            #self.arm.set_servo_angle(angle=abs_cmd, speed=self.SPEED, is_radian=False, wait=True)
-            temp_pub = Float32MultiArray()
-            temp_pub.data = cmd.data
-            self.robot_joints_val_pub.publish(temp_pub)
-
-            # Add data to history
-            self.history['cmd_data'].append(cmd.data)
-            self.history['cmd_rel'].append(cmd_rel)
-            self.history['abs_cmd'].append(abs_cmd)
-
-            if len(self.history['cmd_data']) > 50:  # Keep history to the last 10 entries
-                self.history['cmd_data'].pop(0)
-                self.history['cmd_rel'].pop(0)
-                self.history['abs_cmd'].pop(0)
-
-            # Update the plot
-            self.update_plot()
+            self.move_robot(abs_cmd)
 
         except AttributeError:
-            self.origin = cmd.data
-            # Format the float numbers to two decimal places
-            arm_origin_str = ', '.join(f'{num:.2f}' for num in self.arm_origin)
-            origin_str = ', '.join(f'{num:.2f}' for num in self.origin)
-            self.ax.set_title(f'Joint Angles over Time\narm_origin: [{arm_origin_str}]\norigin: [{origin_str}]')
+            self.origin_command_device = cmd.data
 
         self.get_logger().info("====")
 
-    def update_plot(self):
-        self.lines['cmd_data'].set_data(self.time_steps, self.history['cmd_data'][-1])
-        self.lines['cmd_rel'].set_data(self.time_steps, self.history['cmd_rel'][-1])
-        self.lines['abs_cmd'].set_data(self.time_steps, self.history['abs_cmd'][-1])
+    def move_robot(self, joint_values):
+        """
+            Move the robot to the new joint values.
+            The joint values are received as a list of 6 float values, representing the joint angles in degree.
+        """
+        self.get_logger().info(f"Moving robot to: {joint_values}")
+        self.arm.set_servo_angle(angle=joint_values, speed=self.SPEED, is_radian=False, wait=True)
 
-        self.ax.relim()
-        self.ax.autoscale_view()
+        temp_pub = Float32MultiArray()
+        temp_pub.data = joint_values
+        self.robot_joints_val_pub.publish(temp_pub)
 
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
 
 def main(args=None):
     rclpy.init(args=args)
