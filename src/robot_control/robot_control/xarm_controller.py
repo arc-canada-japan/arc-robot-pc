@@ -83,7 +83,7 @@ class XarmController(AbstractController):
 
         self.get_logger().info("====")
 
-    def move_robot(self, joint_values):
+    def move_robot(self, joint_values, arm_id=1):
         """
             Move the robot to the new joint values.
             The joint values are received as a list of 6 float values, representing the joint angles in degree.
