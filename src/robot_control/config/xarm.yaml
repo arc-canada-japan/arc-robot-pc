@@ -1,4 +1,4 @@
-/xarm_controller:
+/**:
    ros__parameters:
       robot_joints_number: 6 # Number of joints of the robot
       robot_arm_number: 1 # Number of arms of the robot
