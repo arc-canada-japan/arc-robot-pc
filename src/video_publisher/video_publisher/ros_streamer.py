@@ -5,9 +5,9 @@ import cv2
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 
-class ImagePublisher(Node):
+class RosStreamer(Node):
     def __init__(self):
-        super().__init__("image_publisher")
+        super().__init__("ros_streamer")
         self.bridge = CvBridge()
         self.cap = cv2.VideoCapture(0)
         self.pub = self.create_publisher(Image, "/image", 10)
@@ -41,7 +41,7 @@ class ImagePublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    ip = ImagePublisher()
+    ip = RosStreamer()
     print("Publishing...")
     ip.run()
 

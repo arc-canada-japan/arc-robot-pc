@@ -1,5 +1,6 @@
-/ffmpeg_caller:
+/ffmpeg_streamer:
    ros__parameters:
+      camera_number: 1 # Number of cameras to use (1 or 2)
       ffmpeg_ip: '192.168.0.238' # IP of the computer where the video stream is sent
       ffmpeg_port: 8080 # port (can be changed)
       video_x: 1280 # horizontal resolution of the video

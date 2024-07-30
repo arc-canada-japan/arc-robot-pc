@@ -26,8 +26,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'xarm_controller = robot_control.xarm_controller:main',
-            'ffmpeg_caller = robot_control.ffmpeg_caller:main',
+            'xarm_controller = '+package_name+'.xarm_controller:main',
+            'ffmpeg_caller = '+package_name+'.ffmpeg_caller:main',
         ],
     },
 )

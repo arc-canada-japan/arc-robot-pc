@@ -6,9 +6,6 @@ from robot_control.abstract_controller import AbstractController
 from std_msgs.msg import String, Bool, Float32MultiArray
 from xarm.wrapper import XArmAPI
 
-import matplotlib.pyplot as plt # temp for test
-import matplotlib.animation as animation # temp for test
-
 RPM_TO_RAD_S = 0.10472 # mutiply with a rpm value to get the rad/s value
 RPM_TO_DEG_S = 6 # mutiply with a rpm value to get the °/s value
 
@@ -44,6 +41,8 @@ class XarmController(AbstractController):
         temp_pub = Float32MultiArray()
         temp_pub.data = self.INIT_POS
         self.robot_joints_val_pub.publish(temp_pub)
+
+        self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")   
 
     def declare_ros_parameters(self):
         # Get the robot IP address from the parameter send by the launch file
