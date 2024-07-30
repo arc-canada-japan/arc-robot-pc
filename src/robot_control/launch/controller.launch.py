@@ -1,9 +1,9 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, IncludeLaunchDescription, GroupAction
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import Node, PushRosNamespace
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 """
@@ -47,7 +47,12 @@ def launch_setup(context):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('robot_name', default_value='NO_NAME', description='Name of the robot'),
-        OpaqueFunction(function=launch_setup) # required in order to read the value of the argument inside this launch file (to use it in file name)
+        GroupAction(
+            actions=[
+                PushRosNamespace('ARC'),
+                OpaqueFunction(function=launch_setup) # required in order to read the value of the argument inside this launch file (to use it in file name)
+            ]
+        )
     ])
 
 if __name__ == '__main__':
