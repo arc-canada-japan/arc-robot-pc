@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import array
 import rclpy
 from rclpy.node import Node
 from typing import List
@@ -32,10 +33,16 @@ class AbstractController(ABC, Node):
     
     @INIT_POS.setter
     def INIT_POS(self, init_pos):
+        # Check if init_pos is an array of type 'd' and convert to list
+        if isinstance(init_pos, array.array) and init_pos.typecode == 'd':
+            init_pos = list(init_pos)
+        # Check if init_pos is a list of floats
         if not isinstance(init_pos, list) or not all(isinstance(i, float) for i in init_pos):
-            raise TypeError("INIT_POS must be a list of floats")
+            raise TypeError(f"INIT_POS must be a list/array of floats, got {init_pos} of type {type(init_pos)}")
+        # Check if the length of init_pos is correct
         if len(init_pos) != self.JOINTS_NUMBER:
             raise ValueError(f"INIT_POS must have {self.JOINTS_NUMBER} elements")
+        # Set the _init_pos attribute
         self._init_pos = init_pos
 
     # The home position of the robot (as defined by the robot documentation). The setter checks the type and the length of the list.
@@ -43,12 +50,18 @@ class AbstractController(ABC, Node):
     def HOME_POS(self) -> List[float]:
         return self._home_pos
     
-    @INIT_POS.setter
+    @HOME_POS.setter
     def HOME_POS(self, home_pos):
+        # Check if home_pos is an array of type 'd' and convert to list
+        if isinstance(home_pos, array.array) and home_pos.typecode == 'd':
+            home_pos = list(home_pos)
+        # Check if home_pos is a list of floats
         if not isinstance(home_pos, list) or not all(isinstance(i, float) for i in home_pos):
-            raise TypeError("HOME_POS must be a list of floats")
+            raise TypeError(f"HOME_POS must be a list/array of floats, got {home_pos} of type {type(home_pos)}")        
+        # Check if the length of home_pos is correct
         if len(home_pos) != self.JOINTS_NUMBER:
             raise ValueError(f"HOME_POS must have {self.JOINTS_NUMBER} elements")
+        # Set the _home_pos attribute
         self._home_pos = home_pos
 
     # METHODS ----------------------------------------------------------------
@@ -63,9 +76,11 @@ class AbstractController(ABC, Node):
             :param robot_name: (str) the name of the robot.
         """
         self.ROBOT_NAME = robot_name
+        #Node.__init__(self, node_name=self.ROBOT_NAME+'_controller')
+        super().__init__(node_name=self.ROBOT_NAME+'_controller')
+        self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER =========")   
         self._init_pos = None
-        Node.__init__(self, node_name=self.ROBOT_NAME+'_controller')
-
+        
         self.declare_parameter('robot_joints_number', 0)
         self.JOINTS_NUMBER = self.get_parameter('robot_joints_number').get_parameter_value().integer_value
 
@@ -76,8 +91,6 @@ class AbstractController(ABC, Node):
 
         self.create_ros_subscribers()
         self.create_ros_publishers()
-
-        self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER =========")   
 
     # ROS Initialisation methods
     @abstractmethod

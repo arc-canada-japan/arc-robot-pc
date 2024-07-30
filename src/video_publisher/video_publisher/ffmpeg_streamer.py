@@ -2,10 +2,10 @@ import rclpy
 from rclpy.node import Node
 import subprocess
 
-class FfmpegCaller(Node):
+class FfmpegStreamer(Node):
 
     def __init__(self):
-        super().__init__('ffmpeg_caller')
+        super().__init__('ffmpeg_streamer')
         # Declare and get parameters
         self.declare_parameter('ffmpeg_ip', '192.168.11.50')
         self.declare_parameter('ffmpeg_port', 8080)
@@ -32,7 +32,7 @@ class FfmpegCaller(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    caller = FfmpegCaller()
+    caller = FfmpegStreamer()
 
     rclpy.spin(caller)
 
