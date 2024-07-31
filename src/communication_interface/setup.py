@@ -2,7 +2,7 @@ from glob import glob
 import os
 from setuptools import find_packages, setup
 
-package_name = CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
+package_name = 'communication_interface'
 
 setup(
     name=package_name,
@@ -19,14 +19,14 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Siméon Capy',
-    maintainer_email='simeon.capy@rs.tus.ac.jp',
+    maintainer='yoshidalab',
+    maintainer_email='contact@yoshidalab.com',
     description='TODO: Package description',
-    license='Apache-2.0',
+    license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'xarm_controller = '+package_name+'.xarm_controller:main',
+            'ros_interface = '+package_name+'.ros_interface:main',
         ],
     },
 )

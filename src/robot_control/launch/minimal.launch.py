@@ -1,18 +1,24 @@
 import os
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import PathJoinSubstitution, TextSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch_ros.substitutions import FindPackageShare
 
 CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def generate_launch_description():
-    tcp_server = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-         get_package_share_directory(CURRENT_PACKAGE), 'launch'),
-         '/tcp_server.launch.py'])
+    # Declare the 'streaming_method' argument
+    streaming_method_arg = DeclareLaunchArgument(
+        'streaming_method',
+        default_value='ffmpeg',
+        description='Method to use for streaming video'
+    )
+
+    communication_method_arg = DeclareLaunchArgument(
+        'communication_method',
+        default_value='ros',
+        description='The method to communicate between the two PCs'
     )
 
     video_stream = IncludeLaunchDescription(
@@ -24,13 +30,28 @@ def generate_launch_description():
                 ])
             ]),
             launch_arguments={
-                'streaming_method': 'ffmpeg'
+                'streaming_method': LaunchConfiguration('streaming_method')
+            }.items()
+        )
+
+    communication = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([
+                PathJoinSubstitution([
+                    FindPackageShare('communication_interface'),
+                    'launch',
+                    'network_communication.launch.py'
+                ])
+            ]),
+            launch_arguments={
+                'communication_method': LaunchConfiguration('communication_method')
             }.items()
         )
 
 
     return LaunchDescription([
-        tcp_server,
+        streaming_method_arg,
+        communication_method_arg,
+        communication,
         video_stream
     ])
 
