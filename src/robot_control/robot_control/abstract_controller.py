@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 import array
-import rclpy
 from rclpy.node import Node
 from typing import List
 from std_msgs.msg import String, Bool, Float32MultiArray
 from enum import Enum
+#from communication_interface.abstract_interface import *
+from communication_interface import * # Import all classes from the communication_interface package (no need to use the module name)
+
 
 class Arm(Enum):
     """
@@ -16,15 +18,20 @@ class Arm(Enum):
 
 class AbstractController(ABC, Node):
     """
-    Abstract class for the robot controller. It defines the common methods and attributes.
-    All the controllers must inherit from this class. For basic functionnalities, the definition
-    from this abstract class can be used. For specific functionnalities, the methods can be overriden.
+        Abstract class for the robot controller. It defines the common methods and attributes.
+        All the controllers must inherit from this class. For basic functionnalities, the definition
+        from this abstract class can be used. For specific functionnalities, the methods can be overriden.
+
+        The communication is done via the communication_interface ROS package. The interface used is defined
+        by the launch argument 'communication_interface'. It allows the package to be versatile, and use different
+        communication interfaces (ROS, ZMQ, etc.) without changing the code.
     """
     # CONSTANTS --------------------------------------------------------------
     # Those attributes shouldn't be modified by the child classes. They are defined in the constructor.
     ROBOT_NAME: str # Name of the robot
     JOINTS_NUMBER: int # Number of joints of the robot
     ARM_NUMBER: int # Number of arms of the robot (1 or 2)
+    _communication_interface: AbstractInterface # Communication interface used by the robot controller, defined by launch argument
 
     # The initial position of the robot (when the application is launched). The setter checks the type and the length of the list.
     @property
@@ -75,10 +82,16 @@ class AbstractController(ABC, Node):
 
             :param robot_name: (str) the name of the robot.
         """
-        self.ROBOT_NAME = robot_name
-        #Node.__init__(self, node_name=self.ROBOT_NAME+'_controller')
-        super().__init__(node_name=self.ROBOT_NAME+'_controller')
+        self.ROBOT_NAME = robot_name      
+        super().__init__(node_name=self.ROBOT_NAME+'_controller')        
+
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER =========")   
+        self.declare_parameter('communication_interface', "ros")
+        communication_interface = self.get_parameter('communication_interface').get_parameter_value().string_value
+        CommunicationInterfaceClass = globals()[communication_interface.capitalize()+'Interface']
+        self._communication_interface = CommunicationInterfaceClass(self)
+
+
         self._init_pos = None
         
         self.declare_parameter('robot_joints_number', 0)
@@ -89,8 +102,8 @@ class AbstractController(ABC, Node):
         self.declare_parameter('robot_arm_number', 1)
         self.ARM_NUMBER = self.get_parameter('robot_arm_number').get_parameter_value().integer_value
 
-        self.create_ros_subscribers()
-        self.create_ros_publishers()
+        self.create_subscribers()
+        self.create_publishers()
 
     # ROS Initialisation methods
     @abstractmethod
@@ -101,56 +114,36 @@ class AbstractController(ABC, Node):
         """
         pass
 
-    def create_ros_subscribers(self):
+    def create_subscribers(self) -> None:
         """
-            Create the ROS subscribers needed by the robot controller. It creates the minimal subscriptions, including:
+            Create the subscribers needed by the robot controller. It creates the minimal subscriptions, including:
              * the joint values, 
              * the emergency stop 
              * and the joint values as string.
 
-            It can be overriden by the child classes to add more subscriptions.
+            It uses the interface selected in the communication_interface parameter. See the package communication_interface for more details.
+
+            It can be overriden by the child classes to add more subscriptions.            
         """
-        # Create the subscriptions to the joint values, emergency stop and joint values as string
-        self.joints_val_str = self.create_subscription(
-            String,
-            'joint_value_str',
-            self.joint_print_callback,
-            10)
-        self.joints_val_str  # prevent unused variable warning
+        self._communication_interface.define_subscribers({
+            'joint_value_str': (self.joint_print_callback, String),
+            'emergency_stop': (self.emergency_stop_callback, Bool),
+            'joint_value': (self.robot_joints_callback, Float32MultiArray)
+        })
 
-        self.emergency = self.create_subscription(
-            Bool,
-            'emergency_stop',
-            self.emergency_stop_callback,
-            10)
-        self.emergency  # prevent unused variable warning
 
-        if self.ARM_NUMBER == 1:
-            self.joints_val = self.create_subscription(
-                Float32MultiArray,
-                'joint_value',
-                self.robot_joints_callback,
-                10)
-            self.joints_val  # prevent unused variable warning
-        else:
-            self.joints_val_sub = []
-            for i in range(self.ARM_NUMBER):
-                self.joints_val_sub.append(self.create_subscription(
-                    Float32MultiArray, # TO CHECK
-                    'joint_value_'+str(i),
-                    self.robot_joints_callback,
-                    10)
-                )
-
-    def create_ros_publishers(self) -> None:
+    def create_publishers(self) -> None:
         """
-            Create the ROS publishers needed by the robot controller. It creates the minimal publishers, including:
+            Create the publishers needed by the robot controller. It creates the minimal publishers, including:
              * the joint values to send to the Operator PC.
 
             It can be overriden by the child classes to add more publishers.
+           
+            It uses the interface selected in the communication_interface parameter. See the package communication_interface for more details.
         """
-        # Create the publisher to send the joint values to the Operator PC
-        self.robot_joints_val_pub = self.create_publisher(Float32MultiArray, "robot_joint_values", 10)
+        self._communication_interface.define_publishers({
+            'robot_joint_values': Float32MultiArray
+        })
 
     # ROS Callback methods
     @abstractmethod
