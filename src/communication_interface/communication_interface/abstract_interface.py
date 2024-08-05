@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 import os
 from ament_index_python.packages import get_package_share_directory
+from rclpy.node import Node
 
-CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CURRENT_PACKAGE = "communication_interface"#os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class AbstractInterface(ABC):
     INTERFACE_NAME: str
@@ -10,6 +11,7 @@ class AbstractInterface(ABC):
     _publisher_list: dict
     _parameters: dict
     _config_file: str
+    _node: Node
 
     @property
     def INTERFACE_NAME(self) -> str:
@@ -21,10 +23,11 @@ class AbstractInterface(ABC):
 
     
     # -- Constructor --
-    def __init__(self, interface_name: str):
+    def __init__(self, interface_name: str, node: Node) -> None:
         self.INTERFACE_NAME = interface_name
         self._subscriber_list = {}
         self._publisher_list = {}
+        self._node = node
 
         self._config_file = os.path.join(
         get_package_share_directory(CURRENT_PACKAGE),
@@ -33,13 +36,14 @@ class AbstractInterface(ABC):
         )
 
         self.load_parameters()
+        self.connection_to_host()
 
     @abstractmethod
     def load_parameters(self) -> None:
         pass
 
     @abstractmethod
-    def connection_to_host(self, host: str, port: int) -> None:
+    def connection_to_host(self) -> None:
         pass
 
     @abstractmethod

@@ -40,11 +40,14 @@ class XarmController(AbstractController):
 
         temp_pub = Float32MultiArray()
         temp_pub.data = self.INIT_POS
-        self.robot_joints_val_pub.publish(temp_pub)
+        self._communication_interface.publish("robot_joint_values", temp_pub)
 
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")   
 
     def declare_ros_parameters(self):
+        """
+            Declare the ROS parameters used by the controller.
+        """
         # Get the robot IP address from the parameter send by the launch file
         self.declare_parameter('robot_ip', '192.168.1.217')
         self.ip = self.get_parameter('robot_ip').get_parameter_value().string_value
@@ -92,7 +95,7 @@ class XarmController(AbstractController):
 
         temp_pub = Float32MultiArray()
         temp_pub.data = joint_values
-        self.robot_joints_val_pub.publish(temp_pub)
+        self._communication_interface.publish("robot_joint_values", temp_pub)
 
 
 def main(args=None):
