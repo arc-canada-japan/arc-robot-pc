@@ -15,8 +15,8 @@ def generate_launch_description():
         description='Method to use for streaming video'
     )
 
-    communication_method_arg = DeclareLaunchArgument(
-        'communication_method',
+    communication_interface_arg = DeclareLaunchArgument(
+        'communication_interface',
         default_value='ros',
         description='The method to communicate between the two PCs'
     )
@@ -43,14 +43,14 @@ def generate_launch_description():
                 ])
             ]),
             launch_arguments={
-                'communication_method': LaunchConfiguration('communication_method')
+                'communication_interface': LaunchConfiguration('communication_interface')
             }.items()
         )
 
 
     return LaunchDescription([
         streaming_method_arg,
-        communication_method_arg,
+        communication_interface_arg,
         communication,
         video_stream
     ])

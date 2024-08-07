@@ -4,6 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 
 CURRENT_PACKAGE = "communication_interface"#os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#TODO check to have something automatic
 
 class AbstractInterface(ABC):
     INTERFACE_NAME: str
@@ -24,6 +25,7 @@ class AbstractInterface(ABC):
     
     # -- Constructor --
     def __init__(self, interface_name: str, node: Node) -> None:
+        node.get_logger().info(f"Communication interface initialisation ({interface_name})")
         self.INTERFACE_NAME = interface_name
         self._subscriber_list = {}
         self._publisher_list = {}

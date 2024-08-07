@@ -24,22 +24,28 @@ class XarmController(AbstractController):
         self.SPEED = 50 # r/min
         self.SPEED = self.SPEED * RPM_TO_DEG_S # conversion to °/s 
 
-        try:
-            self.arm = XArmAPI(self.ip, is_radian=False)
-        except Exception as e:
-            self.get_logger().error("Impossible to connect to the robot: " + e)
-            exit(10)
+        if not self.simulation_only:
+            try:
+                self.arm = XArmAPI(self.ip, is_radian=False)
+            except Exception as e:
+                self.get_logger().error("Impossible to connect to the robot: " + e)
+                exit(10)
 
-        self.arm.motion_enable(enable=True)
-        self.arm.set_mode(0)
-        self.arm.set_state(state=0)
-        #self.arm.reset(wait=True)
+            self.arm.motion_enable(enable=True)
+            self.arm.set_mode(0)
+            self.arm.set_state(state=0)
+            self.arm.clean_error()
+            self.arm.clean_warn()
+            #self.arm.reset(wait=True)
 
-        self.INIT_POS = self.arm.get_servo_angle()[1][:self.JOINTS_NUMBER]
-        self.get_logger().info(f"INIT_POS: {self.INIT_POS}")
+            self.set_init_position_to_current()
+        else:
+            self.init_pos = self.home_pos
+
+        self.get_logger().info(f"init_pos: {self.init_pos}")
 
         temp_pub = Float32MultiArray()
-        temp_pub.data = self.INIT_POS
+        temp_pub.data = self.init_pos
         self._communication_interface.publish("robot_joint_values", temp_pub)
 
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")   
@@ -52,8 +58,8 @@ class XarmController(AbstractController):
         self.declare_parameter('robot_ip', '192.168.1.217')
         self.ip = self.get_parameter('robot_ip').get_parameter_value().string_value
 
-        self.declare_parameter('robot_home_position', [0.0] * self.JOINTS_NUMBER)
-        self.HOME_POS = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
+        self.declare_parameter('robot_home_position', self.home_pos)
+        self.home_pos = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
 
     def emergency_stop_callback(self, msg):
         """
@@ -61,12 +67,14 @@ class XarmController(AbstractController):
             It stops the robot if the message is True.
         """
         self.get_logger().info(f"Emergency stop: {msg.data}")
+        if self.simulation_only: # No need to stop the simulation
+            return
         if msg.data:
             self.arm.emergency_stop()
         else:
             self.arm.set_state(state=0)
 
-    def robot_joints_callback(self, cmd):
+    def joints_callback(self, cmd):
         """
             This function is called when a new joint value is received from the Operator PC.
             It computes the robot joint values regarding the initial position of the robot,
@@ -75,7 +83,7 @@ class XarmController(AbstractController):
         self.get_logger().info(f"JOINTS: {cmd.data}") # temp for test
         try:
             cmd_rel = [a - b for a, b in zip(cmd.data, self.origin_command_device)]
-            abs_cmd = [a + b for a, b in zip(self.INIT_POS, cmd_rel)]
+            abs_cmd = [a + b for a, b in zip(self.init_pos, cmd_rel)]
 
             self.get_logger().info(f"ABS CM: {abs_cmd}") # temp for test
             self.move_robot(abs_cmd)
@@ -91,12 +99,15 @@ class XarmController(AbstractController):
             The joint values are received as a list of 6 float values, representing the joint angles in degree.
         """
         self.get_logger().info(f"Moving robot to: {joint_values}")
-        self.arm.set_servo_angle(angle=joint_values, speed=self.SPEED, is_radian=False, wait=True)
+        if not self.simulation_only:
+            self.arm.set_servo_angle(angle=joint_values, speed=self.SPEED, is_radian=False, wait=True)
 
         temp_pub = Float32MultiArray()
         temp_pub.data = joint_values
         self._communication_interface.publish("robot_joint_values", temp_pub)
 
+    def set_init_position_to_current(self):
+        self.init_pos = self.arm.get_servo_angle()[1][:self.JOINTS_NUMBER]
 
 def main(args=None):
     rclpy.init(args=args)

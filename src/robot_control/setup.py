@@ -4,6 +4,16 @@ from setuptools import find_packages, setup
 
 package_name = CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 
+# Function to find all controller scripts
+def find_controllers():
+    controllers = []
+    for filepath in glob(os.path.join(package_name, '*_controller.py')):
+        filename = os.path.basename(filepath)
+        modulename = filename[:-3]  # Strip .py extension
+        if modulename != 'abstract_controller':
+            controllers.append(f"{modulename} = {package_name}.{modulename}:main")
+    return controllers
+
 setup(
     name=package_name,
     version='0.0.0',
@@ -25,8 +35,6 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': [
-            'xarm_controller = '+package_name+'.xarm_controller:main',
-        ],
+        'console_scripts': find_controllers(),
     },
 )

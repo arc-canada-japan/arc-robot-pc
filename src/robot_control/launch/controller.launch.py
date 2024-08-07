@@ -22,7 +22,8 @@ CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspa
 def launch_setup(context):
     robot_name = LaunchConfiguration('robot_name').perform(context)
     streaming_method = LaunchConfiguration('streaming_method').perform(context)
-    communication_method = LaunchConfiguration('communication_method').perform(context)
+    communication_interface = LaunchConfiguration('communication_interface').perform(context)
+    simulation_only = LaunchConfiguration('simulation_only').perform(context)
 
     minimal_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
@@ -30,7 +31,7 @@ def launch_setup(context):
             '/minimal.launch.py']),
         launch_arguments={
                 'streaming_method': streaming_method,
-                'communication_method': communication_method
+                'communication_interface': communication_interface
             }.items()  
     )
 
@@ -45,7 +46,7 @@ def launch_setup(context):
         executable=robot_name + '_controller',
         name=robot_name + '_controller',
         output='screen',
-        parameters=[config]
+        parameters=[config, {'simulation_only': simulation_only=="True"}]
     )
 
     return [minimal_launch, node]
@@ -54,7 +55,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('robot_name', default_value='NO_NAME', description='Name of the robot'),
         DeclareLaunchArgument('streaming_method', default_value='NO_METHOD', description='The method to stream the video'),
-        DeclareLaunchArgument('communication_method', default_value='NO_METHOD', description='The method to communicate between the two PCs'),
+        DeclareLaunchArgument('communication_interface', default_value='NO_METHOD', description='The method to communicate between the two PCs'),
+        DeclareLaunchArgument('simulation_only', default_value="False", description='If true, the robot will not be controlled (but the computed joints positions will still be published)'),
         GroupAction(
             actions=[
                 PushRosNamespace('ARC'),
