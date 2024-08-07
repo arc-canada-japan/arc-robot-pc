@@ -21,6 +21,7 @@ class RosInterface(AbstractInterface):
             topic,
             callback,
             10)
+        self._node.get_logger().info(f"Subscribers created: {self._subscriber_list}")
             
     def define_publishers(self, pub_list: dict) -> None:
         for topic, type in pub_list.items():

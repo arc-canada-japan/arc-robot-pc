@@ -16,6 +16,26 @@ class Arm(Enum):
     LEFT = 1
     RIGHT = 2
 
+class ArticulationDesc:
+    """
+        Descriptor class for the articulation attributes of the robot controller. It checks the type and the length of the list.
+    """
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, instance, owner):
+        return instance.__dict__[self.name]# or [0.0] * instance.JOINTS_NUMBER
+    
+    def __set__(self, instance, value):
+        if isinstance(value, array.array) and value.typecode == 'd':
+            instance.__dict__[self.name] = list(value)
+            return
+        if not isinstance(value, list) or not all(isinstance(i, float) for i in value):
+            raise TypeError(f"{self.name} must be a list/array of floats, got {value} of type {type(value)}")
+        if len(value) != instance.JOINTS_NUMBER:
+            raise ValueError(f"{self.name} must have {instance.JOINTS_NUMBER} elements")
+        instance.__dict__[self.name] = value
+
 class AbstractController(ABC, Node):
     """
         Abstract class for the robot controller. It defines the common methods and attributes.
@@ -26,50 +46,26 @@ class AbstractController(ABC, Node):
         by the launch argument 'communication_interface'. It allows the package to be versatile, and use different
         communication interfaces (ROS, ZMQ, etc.) without changing the code.
     """
-    # CONSTANTS --------------------------------------------------------------
-    # Those attributes shouldn't be modified by the child classes. They are defined in the constructor.
-    ROBOT_NAME: str # Name of the robot
-    JOINTS_NUMBER: int # Number of joints of the robot
-    ARM_NUMBER: int # Number of arms of the robot (1 or 2)
-    _communication_interface: AbstractInterface # Communication interface used by the robot controller, defined by launch argument
-
-    # The initial position of the robot (when the application is launched). The setter checks the type and the length of the list.
-    @property
-    def INIT_POS(self) -> List[float]:
-        return self._init_pos
+    # READ-ONLY ATTRIBUTES ---------------------------------------------------
+    @property # Name of the robot
+    def ROBOT_NAME(self) -> str:
+        return self._ROBOT_NAME
     
-    @INIT_POS.setter
-    def INIT_POS(self, init_pos):
-        # Check if init_pos is an array of type 'd' and convert to list
-        if isinstance(init_pos, array.array) and init_pos.typecode == 'd':
-            init_pos = list(init_pos)
-        # Check if init_pos is a list of floats
-        if not isinstance(init_pos, list) or not all(isinstance(i, float) for i in init_pos):
-            raise TypeError(f"INIT_POS must be a list/array of floats, got {init_pos} of type {type(init_pos)}")
-        # Check if the length of init_pos is correct
-        if len(init_pos) != self.JOINTS_NUMBER:
-            raise ValueError(f"INIT_POS must have {self.JOINTS_NUMBER} elements")
-        # Set the _init_pos attribute
-        self._init_pos = init_pos
-
-    # The home position of the robot (as defined by the robot documentation). The setter checks the type and the length of the list.
-    @property
-    def HOME_POS(self) -> List[float]:
-        return self._home_pos
+    @property # Number of joints of the robot
+    def JOINTS_NUMBER(self) -> int:
+        return self._JOINTS_NUMBER
     
-    @HOME_POS.setter
-    def HOME_POS(self, home_pos):
-        # Check if home_pos is an array of type 'd' and convert to list
-        if isinstance(home_pos, array.array) and home_pos.typecode == 'd':
-            home_pos = list(home_pos)
-        # Check if home_pos is a list of floats
-        if not isinstance(home_pos, list) or not all(isinstance(i, float) for i in home_pos):
-            raise TypeError(f"HOME_POS must be a list/array of floats, got {home_pos} of type {type(home_pos)}")        
-        # Check if the length of home_pos is correct
-        if len(home_pos) != self.JOINTS_NUMBER:
-            raise ValueError(f"HOME_POS must have {self.JOINTS_NUMBER} elements")
-        # Set the _home_pos attribute
-        self._home_pos = home_pos
+    @property # Number of arms of the robot (1 or 2)
+    def ARM_NUMBER(self) -> int:
+        return self._ARM_NUMBER
+    
+    @property # Communication interface used by the robot controller, defined by launch argument (return the name of the interface)
+    def COMMUNICATION_INTERFACE(self) -> str:
+        return self._communication_interface.INTERFACE_NAME
+    
+    # ATTRIBUTES -------------------------------------------------------------    
+    init_pos = ArticulationDesc() # The initial position of the robot. Should be set to the current position in the constructor (by calling set_init_position_to_current).
+    home_pos = ArticulationDesc() # The home position of the robot (as defined by the Robot). Should be set in the YAML configuration file.
 
     # METHODS ----------------------------------------------------------------
 
@@ -82,7 +78,7 @@ class AbstractController(ABC, Node):
 
             :param robot_name: (str) the name of the robot.
         """
-        self.ROBOT_NAME = robot_name      
+        self._ROBOT_NAME = robot_name      
         super().__init__(node_name=self.ROBOT_NAME+'_controller')        
 
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER =========")   
@@ -91,16 +87,17 @@ class AbstractController(ABC, Node):
         CommunicationInterfaceClass = globals()[communication_interface.capitalize()+'Interface']
         self._communication_interface = CommunicationInterfaceClass(self)
 
-
-        self._init_pos = None
+        self.declare_parameter('simulation_only', False)
+        self.simulation_only = self.get_parameter('simulation_only').get_parameter_value().bool_value
+        self.get_logger().info(f"Simulation only: {self.simulation_only}")
         
         self.declare_parameter('robot_joints_number', 0)
-        self.JOINTS_NUMBER = self.get_parameter('robot_joints_number').get_parameter_value().integer_value
+        self._JOINTS_NUMBER = self.get_parameter('robot_joints_number').get_parameter_value().integer_value
 
-        self._home_pos = [0.0] * self.JOINTS_NUMBER # Default value
+        self.home_pos = [0.0] * self.JOINTS_NUMBER # Default value
 
         self.declare_parameter('robot_arm_number', 1)
-        self.ARM_NUMBER = self.get_parameter('robot_arm_number').get_parameter_value().integer_value
+        self._ARM_NUMBER = self.get_parameter('robot_arm_number').get_parameter_value().integer_value
 
         self.create_subscribers()
         self.create_publishers()
@@ -128,7 +125,7 @@ class AbstractController(ABC, Node):
         self._communication_interface.define_subscribers({
             'joint_value_str': (self.joint_print_callback, String),
             'emergency_stop': (self.emergency_stop_callback, Bool),
-            'joint_value': (self.robot_joints_callback, Float32MultiArray)
+            'joint_value': (self.joints_callback, Float32MultiArray)
         })
 
 
@@ -147,7 +144,7 @@ class AbstractController(ABC, Node):
 
     # ROS Callback methods
     @abstractmethod
-    def robot_joints_callback(self, cmd) -> None:
+    def joints_callback(self, cmd) -> None:
         """
             Callback method for the joint values. It should be overriden by the child classes.
             This method is called when the robot receives new joint values. It should compute the real robot joint values (if needed).
@@ -197,10 +194,17 @@ class AbstractController(ABC, Node):
         """
             Move the robot to the home position. It calls the move_robot method with the home position.
         """
-        self.move_robot(self.HOME_POS)
+        self.move_robot(self.home_pos)
 
     def move_to_init_position(self) -> None:
         """
             Move the robot to the initial position. It calls the move_robot method with the initial position.
         """
-        self.move_robot(self.INIT_POS)
+        self.move_robot(self.init_pos)
+
+    @abstractmethod
+    def set_init_position_to_current(self) -> None:
+        """
+            Set the initial position of the robot to the current position. It should be overriden by the child classes.
+        """
+        pass

@@ -1,8 +1,6 @@
-from glob import glob
-import os
 from setuptools import find_packages, setup
 
-package_name = 'communication_interface'
+package_name = 'arc_gui'
 
 setup(
     name=package_name,
@@ -12,10 +10,6 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        # Include all launch files.
-        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
-        # Include all config files.
-        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml')))
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -8,7 +8,7 @@ package_dir = os.path.dirname(__file__)
 
 # Dynamically import all classes from all modules in this package
 for module_name in os.listdir(package_dir):
-    if module_name.endswith(".py") and module_name != "__init__.py":
+    if module_name.endswith("_interface.py") and module_name != "__init__.py":
         # Remove the .py extension to get the module name
         module_name = module_name[:-3]
         # Import the module dynamically

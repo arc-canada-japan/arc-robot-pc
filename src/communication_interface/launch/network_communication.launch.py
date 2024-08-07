@@ -8,7 +8,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def launch_setup(context):
-    method = LaunchConfiguration('communication_method').perform(context)
+    method = LaunchConfiguration('communication_interface').perform(context)
     config = os.path.join(
         get_package_share_directory(CURRENT_PACKAGE),
         'config',
@@ -26,7 +26,7 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('communication_method', default_value='NO_METHOD', description='The method to communicate between the two PCs'),
+        DeclareLaunchArgument('communication_interface', default_value='NO_METHOD', description='The method to communicate between the two PCs'),
         GroupAction(
             actions=[
                 #PushRosNamespace('ARC'),
