@@ -20,14 +20,20 @@ def generate_launch_description():
     with open(config_file_path, 'r') as f:
         params = yaml.safe_load(f)
 
-    return LaunchDescription([
-        LogInfo(msg=['Launching nep_server.py with parameters: param1=', params['/**']['ros__parameters']]),
-        LogInfo(msg=['Using package: ', CURRENT_PACKAGE]),
-        LogInfo(msg=['Script path: ', script_path]),
+        if params['/**']['ros__parameters']['tcp_ip'] == "127.0.0.1":
+            return LaunchDescription([
+                LogInfo(msg=['Launching local nep_server.py with parameters: param1=', params['/**']['ros__parameters']]),
+                LogInfo(msg=['Using package: ', CURRENT_PACKAGE]),
+                LogInfo(msg=['Script path: ', script_path]),
 
-        # Run the Python script with parameters
-        ExecuteProcess(
-            cmd=['python3', str(script_path), "--args", args],
-            output='screen'
-        )
-    ])
+                # Run the Python script with parameters
+                ExecuteProcess(
+                    cmd=['python3', str(script_path), "--args", args],
+                    output='screen'
+                )
+            ])
+        else:
+            return LaunchDescription([ # TODO: check ow to connect to the remote server
+                LogInfo(msg=['Using remote NEP server with parameters: param1=', params['/**']['ros__parameters']]),
+                LogInfo(msg=['Using package: ', CURRENT_PACKAGE]),
+            ])

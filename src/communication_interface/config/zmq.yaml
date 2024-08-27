@@ -1,0 +1,4 @@
+/**:
+   ros__parameters:
+      tcp_ip: '192.168.0.162'
+      tcp_port: 1600
