@@ -123,9 +123,9 @@ class AbstractController(ABC, Node):
             It can be overriden by the child classes to add more subscriptions.            
         """
         self._communication_interface.define_subscribers({
-            'joint_value_str': (self.joint_print_callback, String),
-            'emergency_stop': (self.emergency_stop_callback, Bool),
-            'joint_value': (self.joints_callback, Float32MultiArray)
+            'joint_value_str': (self.joint_print_callback, self._communication_interface.TypeStrAlias),
+            'emergency_stop': (self.emergency_stop_callback, self._communication_interface.TypeBoolAlias),
+            'joint_value': (self.joints_callback, self._communication_interface.TypeFloatArrayAlias)
         })
 
 
@@ -139,7 +139,7 @@ class AbstractController(ABC, Node):
             It uses the interface selected in the communication_interface parameter. See the package communication_interface for more details.
         """
         self._communication_interface.define_publishers({
-            'robot_joint_values': Float32MultiArray
+            'robot_joint_values': self._communication_interface.TypeFloatArrayAlias
         })
 
     # ROS Callback methods
@@ -177,7 +177,7 @@ class AbstractController(ABC, Node):
 
             :param msg: (String) the joint values as string.
         """
-        self.get_logger().info('"%s"' % msg.data)
+        self.get_logger().info('"%s"' % msg)
 
     # Robot control methods
     @abstractmethod

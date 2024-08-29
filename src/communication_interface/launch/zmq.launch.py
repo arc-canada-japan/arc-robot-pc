@@ -8,14 +8,7 @@ import yaml
 CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def generate_launch_description():
-    args = LaunchConfiguration('args')
-
-
-    config_file_path = args.perform(None)  # Get the path to the YAML file TODO: Check if this is correct
-    with open(config_file_path, 'r') as f:
-        params = yaml.safe_load(f)
-
-        return LaunchDescription([ # TODO: check ow to connect to the remote server
-            LogInfo(msg=['Using remote ZMQ server with parameters: param1=', params['/**']['ros__parameters']]),
+    return LaunchDescription([
+            LogInfo(msg=['Using remote ZMQ server']),
             LogInfo(msg=['Using package: ', CURRENT_PACKAGE]),
-        ])
+    ])

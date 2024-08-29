@@ -44,9 +44,9 @@ class XarmController(AbstractController):
 
         self.get_logger().info(f"init_pos: {self.init_pos}")
 
-        temp_pub = Float32MultiArray()
-        temp_pub.data = self.init_pos
-        self._communication_interface.publish("robot_joint_values", temp_pub)
+        #temp_pub = Float32MultiArray()
+        #temp_pub.data = self.init_pos
+        self._communication_interface.publish("robot_joint_values", self.init_pos)
 
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")   
 
