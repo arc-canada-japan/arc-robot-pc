@@ -13,14 +13,28 @@ The current repository is composed of the following packages:
 * `robot_control`: this is the main package. To run the project, you need to use the launch file of this package, that is calling the others. It sends the command to the robot according to the command received.
 * `video_publisher`: this package is used to stream the video from the robot PC to the operator PC. The method of streaming can be selected.
 
-## GUI ##
+You can have more information of each package in their respective README files.
 
-More details are in the package README file.
+## How to build ##
 
-## Communication ##
+Since this project is in Python, you do not it to build it *per se*. However, you need to use the `concol build` command to copy the code, and parametring ROS to be able to use it.
 
-## Robot Control ##
+## How to run ##
 
-## Video ##
+### With command line ###
+
+You can use the following command to use this project:
+
+```
+ros2 launch robot_control controller.launch.py robot_name:=XXX streaming_method:=YYY communication_interface:=ZZZ
+```
+
+You should replace `XXX`, `YYY` and `ZZZ` by the name of your robot, strealing method and communication interface, respectively. To know the available options, you can look in the `config` folders of the `robot_control`, `video_publisher` and `communication_interface` respectively. The name is the same as the config file, without the extension (case sensitive).
+Tou can also add the argument `simulation_only:=True` to test only the communication and the controller compution. The real robot will not move, but the joint values will still be exhanged.
+
+To add your own robot, streaming method or communication interface, please read the README file of each package.
+
+
+### With GUI ###
 
 TODO

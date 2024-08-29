@@ -46,7 +46,9 @@ def launch_setup(context):
         executable=robot_name + '_controller',
         name=robot_name + '_controller',
         output='screen',
-        parameters=[config, {'simulation_only': simulation_only=="True"}]
+        parameters=[config, {'communication_interface': communication_interface, 
+                             'simulation_only': simulation_only=="True"}
+                   ]
     )
 
     return [minimal_launch, node]

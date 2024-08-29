@@ -22,6 +22,13 @@ class AbstractInterface(ABC):
     def INTERFACE_NAME(self, interface_name: str) -> None:        
         self._interface_name = interface_name
 
+    TypeBoolAlias = bool
+    TypeIntAlias = int
+    TypeStrAlias = str
+    TypeDictAlias = dict
+    TypeListAlias = list
+    TypeFloatArrayAlias = list
+    TypeIntArrayAlias = list
     
     # -- Constructor --
     def __init__(self, interface_name: str, node: Node) -> None:
