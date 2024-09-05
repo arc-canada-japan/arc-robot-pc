@@ -2,6 +2,8 @@ from communication_interface.abstract_interface import AbstractInterface
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32MultiArray, String, Int64, Int32MultiArray
 import enum
+from functools import partial
+import threading
 
 class PubData(enum.Enum):
     PUB = 0
@@ -28,11 +30,15 @@ class RosInterface(AbstractInterface):
 
     def define_subscribers(self, sub_list: dict) -> None:
         for topic, (callback, type) in sub_list.items():
-            self._subscriber_list[topic] = self._node.create_subscription(
-            type,
-            topic,
-            callback,
-            10)
+            # Use partial to create a callback function with the topic pre-set
+            callback_with_topic = partial(self._common_callback, topic=topic)
+            self._subscriber_list[topic] = (callback,
+                                            self._node.create_subscription(
+                                            type,
+                                            topic,
+                                            callback_with_topic,
+                                            10)
+            )
         self._node.get_logger().info(f"Subscribers created: {self._subscriber_list}")
             
     def define_publishers(self, pub_list: dict) -> None:
@@ -50,3 +56,18 @@ class RosInterface(AbstractInterface):
             self._publisher_list[pub_topic][PubData.PUB.value].publish(data)
         except TypeError as e:
             self._node.get_logger().error(f"Error while publishing the data, the given type is wrong: {e}")
+
+    def _common_callback(self, msg, topic):
+        """
+            Common callback function for all the subscribers. It calls the callback function of the subscriber in a thread.
+            It is used to call the callback and sending it directly the data (avoing to use msg.data). This is done for usability reasons.
+            All the callbacks of the controllers are expecting to receive the data directly, not the message.
+            The thread is used to avoid blocking the current callback.
+
+            :param msg: the message received
+            :param topic: the topic where the message was received
+        """
+        th = threading.Thread(target=self._subscriber_list[topic][0],
+                              args=(msg.data,), 
+                              daemon=True)
+        th.start() # call the callback in a thread to avoid blocking the main thread

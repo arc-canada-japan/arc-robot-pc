@@ -18,7 +18,7 @@ class ZmqInterface(AbstractInterface):
         
         # Calling the listening function in a thread
         self.listening = True
-        self._th = threading.Thread(target=self.listening_thread)
+        self._th = threading.Thread(target=self.listening_thread, daemon=True)
         
     def __del__(self):
         self.listening = False
@@ -31,9 +31,12 @@ class ZmqInterface(AbstractInterface):
             params = yaml.safe_load(f)
             self._parameters = params['/**']['ros__parameters']
 
-            self.ip = self._parameters['tcp_ip']
-            self.port_sub = self._parameters['tcp_port']
-            self.port_pub = self._parameters['tcp_port'] + 1
+            self.ip = self._parameters['host_ip']
+            self.port = self._parameters['host_port']
+            self.protocol = self._parameters['protocol']
+            self.ws_path = self._parameters['ws_path']
+
+            self.url = f"{self.protocol}://{self.ip}:{self.port}{self.ws_path if self.protocol == 'ws' else ""}"
      
     def connection_to_host(self) -> None:
         self._context = zmq.Context()
@@ -44,7 +47,7 @@ class ZmqInterface(AbstractInterface):
         self._subscriber_list = sub_list
 
         self._subscriber = self._context.socket(zmq.SUB)
-        self._subscriber.connect(f"tcp://{self.ip}:{self.port_sub}")
+        self._subscriber.connect(self.url)
 
         txt_topics = ""
         for topic in self._subscriber_list:
@@ -54,7 +57,7 @@ class ZmqInterface(AbstractInterface):
         self._poller = zmq.Poller()
         self._poller.register(self._subscriber, zmq.POLLIN)
 
-        self._node.get_logger().info(f"Subscriber created (tcp://{self.ip}:{self.port_sub})")
+        self._node.get_logger().info(f"Subscriber created ({self.url})")
         self._node.get_logger().info(f"Subscribed to the following topics: {txt_topics}")       
         self._th.start()
 
@@ -63,8 +66,8 @@ class ZmqInterface(AbstractInterface):
             return
         self._publisher_list = pub_list
         self._publisher = self._context.socket(zmq.PUB)
-        self._publisher.connect(f"tcp://{self.ip}:{self.port_pub}")
-        self._node.get_logger().info(f"Publisher created (tcp://{self.ip}:{self.port_pub})")
+        self._publisher.connect(self.url)
+        self._node.get_logger().info(f"Publisher created ({self.url})")
 
     def publish(self, pub_topic: str, data) -> None:
          # check if the data type is good
@@ -86,7 +89,11 @@ class ZmqInterface(AbstractInterface):
                     data = self._subscriber.recv_json()                    
                     if not isinstance(data, self._subscriber_list[topic][SubData.TYPE.value]):
                         data = self._subscriber_list[topic][SubData.TYPE.value](data)
-                    self._subscriber_list[topic][SubData.CALLBACK.value](data) # call the callback
+                    th = threading.Thread(target=self._subscriber_list[topic][SubData.CALLBACK.value],
+                                          args=(data,), 
+                                          daemon=True)
+                    th.start() # call the callback in a thread to avoid blocking the main thread
+                    #self._subscriber_list[topic][SubData.CALLBACK.value](data) # call the callback
                 except Exception as e:
                     self._node.get_logger().error(f"Error while receiving data: {e}")
                     continue
