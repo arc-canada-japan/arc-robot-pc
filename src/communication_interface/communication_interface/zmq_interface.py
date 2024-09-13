@@ -5,6 +5,8 @@ from rclpy.node import Node
 import enum
 import threading
 
+# TODO NOT FINISHED
+
 # Enumeration for the type of the data and callback (for readability)
 class SubData(enum.Enum):
     CALLBACK = 0
@@ -36,12 +38,12 @@ class ZmqInterface(AbstractInterface):
             self.protocol = self._parameters['protocol']
             self.ws_path = self._parameters['ws_path']
 
-            self.url = f"{self.protocol}://{self.ip}:{self.port}{self.ws_path if self.protocol == 'ws' else ""}"
+            self.url = f"{self.protocol}://{self.ip}:{self.port}{self.ws_path if self.protocol == 'ws' else ''}"
      
     def connection_to_host(self) -> None:
         self._context = zmq.Context()
 
-    def define_subscribers(self, sub_list: dict) -> None:
+    def define_subscribers(self, sub_list: dict) -> None: # TODO the sub_list should be added, not replaced
         if not sub_list or sub_list == {}:
             return        
         self._subscriber_list = sub_list

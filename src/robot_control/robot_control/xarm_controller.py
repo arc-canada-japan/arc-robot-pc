@@ -1,7 +1,7 @@
 from typing import List
 import rclpy
 from rclpy.node import Node
-from robot_control.abstract_controller import AbstractController
+from robot_control.abstract_controller import AbstractController, ArmLeg, ArmLegSide, ArticulationDesc
 
 from std_msgs.msg import String, Bool, Float32MultiArray
 from xarm.wrapper import XArmAPI
@@ -43,10 +43,9 @@ class XarmController(AbstractController):
             self.init_pos = self.home_pos
 
         self.get_logger().info(f"init_pos: {self.init_pos}")
-
-        #temp_pub = Float32MultiArray()
-        #temp_pub.data = self.init_pos
-        self._communication_interface.publish("robot_joint_values", self.init_pos)
+        self._communication_interface.publish("robot_joint_values",
+                                              self.init_pos[ArmLeg.ARM.value][ArmLegSide.LEFT.value]
+                                            )
 
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")   
 
@@ -58,18 +57,18 @@ class XarmController(AbstractController):
         self.declare_parameter('robot_ip', '192.168.1.217')
         self.ip = self.get_parameter('robot_ip').get_parameter_value().string_value
 
-        self.declare_parameter('robot_home_position', self.home_pos)
-        self.home_pos = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
+        #self.declare_parameter('robot_home_position', self.home_pos)
+        #self.home_pos = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
 
     def emergency_stop_callback(self, msg):
         """
             This function is called when an emergency stop is requested.
             It stops the robot if the message is True.
         """
-        self.get_logger().info(f"Emergency stop: {msg.data}")
+        self.get_logger().info(f"Emergency stop: {msg}")
         if self.simulation_only: # No need to stop the simulation
             return
-        if msg.data:
+        if msg:
             self.arm.emergency_stop()
         else:
             self.arm.set_state(state=0)
@@ -80,20 +79,20 @@ class XarmController(AbstractController):
             It computes the robot joint values regarding the initial position of the robot,
             and it moves the robot to the new joint values.
         """
-        self.get_logger().info(f"JOINTS: {cmd.data}") # temp for test
+        self.get_logger().info(f"JOINTS: {cmd}") # temp for test
         try:
-            cmd_rel = [a - b for a, b in zip(cmd.data, self.origin_command_device)]
+            cmd_rel = [a - b for a, b in zip(cmd, self.origin_command_device)]
             abs_cmd = [a + b for a, b in zip(self.init_pos, cmd_rel)]
 
             self.get_logger().info(f"ABS CM: {abs_cmd}") # temp for test
             self.move_robot(abs_cmd)
 
         except AttributeError:
-            self.origin_command_device = cmd.data
+            self.origin_command_device = cmd
 
         self.get_logger().info("====")
 
-    def move_robot(self, joint_values, arm_id=1):
+    def move_robot(self, joint_values, arm_leg=ArmLeg.ARM, limb_side=ArmLegSide.LEFT):
         """
             Move the robot to the new joint values.
             The joint values are received as a list of 6 float values, representing the joint angles in degree.
@@ -102,12 +101,17 @@ class XarmController(AbstractController):
         if not self.simulation_only:
             self.arm.set_servo_angle(angle=joint_values, speed=self.SPEED, is_radian=False, wait=True)
 
-        temp_pub = Float32MultiArray()
-        temp_pub.data = joint_values
-        self._communication_interface.publish("robot_joint_values", temp_pub)
+        self._communication_interface.publish("robot_joint_values", joint_values)
 
     def set_init_position_to_current(self):
-        self.init_pos = self.arm.get_servo_angle()[1][:self.JOINTS_NUMBER]
+        init_pos = {
+            ArmLegSide.LEFT.value: None,
+            ArmLegSide.RIGHT.value: None
+        }
+        temp = ArticulationDesc()
+        temp = self.arm.get_servo_angle()[1][:self.JOINTS_NUMBER]
+        init_pos[ArmLegSide.LEFT.value] = temp
+        self.init_pos[ArmLeg.ARM] = init_pos
 
 def main(args=None):
     rclpy.init(args=args)

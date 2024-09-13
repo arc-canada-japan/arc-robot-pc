@@ -2,7 +2,7 @@ import nep
 from communication_interface.abstract_interface import AbstractInterface
 from rclpy.node import Node
 
-### TODO
+### TODO NOT FINISHED
 
 class NepInterface(AbstractInterface):
     def __init__(self, node: Node):
