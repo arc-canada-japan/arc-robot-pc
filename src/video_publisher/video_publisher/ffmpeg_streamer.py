@@ -7,7 +7,7 @@ class FfmpegStreamer(Node):
     def __init__(self):
         super().__init__('ffmpeg_streamer')
         # Declare and get parameters
-        self.declare_parameter('ffmpeg_ip', '192.168.11.50')
+        self.declare_parameter('ffmpeg_ip', 'NO_IP')
         self.declare_parameter('ffmpeg_port', 8080)
         self.declare_parameter('video_x', 1280)
         self.declare_parameter('video_y', 720)

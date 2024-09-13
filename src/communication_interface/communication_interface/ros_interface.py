@@ -1,3 +1,4 @@
+import array
 from communication_interface.abstract_interface import AbstractInterface
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32MultiArray, String, Int64, Int32MultiArray
