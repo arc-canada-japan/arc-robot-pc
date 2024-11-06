@@ -1,6 +1,7 @@
 /**:
    ros__parameters:
-      host_ip: '192.168.0.162'
+      host_ip: '49.212.1.114' #'192.168.0.162'
       host_port: 80
       protocol: 'ws'
-      ws_path: '/atob' # todo: check if this is needed
+      ws_path_pub: '/rob2op_pub'
+      ws_path_sub: '/op2rob_sub'

@@ -1,49 +1,12 @@
 from abc import ABC, abstractmethod
 import array
+import copy
 from rclpy.node import Node
 from typing import List
 from std_msgs.msg import String, Bool, Float32MultiArray
 from enum import Enum
 from communication_interface import * # Import all classes from the communication_interface package (no need to use the module name)
-
-class ArmLeg(Enum):
-    """
-        Enum class to define the arm leg side. For code readability, the arm/leg side can be defined with this enum.
-    """
-    ARM = 0
-    LEG = 1
-    WHEEL = 2
-
-class ArmLegSide(Enum):
-    """
-        Enum class to define the arm/leg side. It corresponds to the arm_id/leg_id in the joint values received by the robot.
-    """
-    NONE = 0
-    LEFT = 1
-    RIGHT = 2
-
-class ArticulationDesc:
-    """
-        Descriptor class for the articulation attributes of the robot controller. It checks the type and the length of the list.
-    """
-    def __set_name__(self, owner, name):
-        self.name = name
-
-    def __get__(self, instance, owner):
-        return instance.__dict__[self.name]# or [0.0] * instance.ARM_JOINTS_NUMBER
-    
-    def __set__(self, instance, value):
-        if isinstance(value, array.array) and value.typecode == 'd':
-            instance.__dict__[self.name] = list(value)
-            return
-        if not isinstance(value, list) or not all(isinstance(i, float) for i in value):
-            raise TypeError(f"{self.name} must be a list/array of floats, got {value} of type {type(value)}")
-        if len(value) != instance.LEG_JOINTS_NUMBER or len(value) != instance.ARM_JOINTS_NUMBER: # TODO: adapt automatically to the number of joints depending on the limb
-            raise ValueError(f"{self.name} must have {instance.LEG_JOINTS_NUMBER} or {instance.ARM_JOINTS_NUMBER} elements")
-        instance.__dict__[self.name] = value
-
-    def __str__(self) -> str:
-        return str(self.__get__(self, self.__class__))
+import robot_control.controller_tools as ct
 
 class AbstractController(ABC, Node):
     """
@@ -54,6 +17,12 @@ class AbstractController(ABC, Node):
         The communication is done via the communication_interface ROS package. The interface used is defined
         by the launch argument 'communication_interface'. It allows the package to be versatile, and use different
         communication interfaces (ROS, ZMQ, etc.) without changing the code.
+
+        The variables are prefixed with:
+            * 'jav_' are Joint Angles Values (as a ct.JointAnglesValuesn ~ a list[float] for each limb).
+            * 'eec_' are End Effector Coordinates (as a list[float] of 6 components: x,y,z,roll,pitch,yaw).
+        The controller can use both depending on the robot API and purpose. The values are for the robot,
+        except if specified otherwise (e.g. for the controller).
     """
     # READ-ONLY ATTRIBUTES ---------------------------------------------------
     @property # Name of the robot
@@ -62,7 +31,7 @@ class AbstractController(ABC, Node):
     
     @property # Number of joints of the arm of robot
     def ARM_JOINTS_NUMBER(self) -> int:
-        return self._JOINTS_NUMBER[ArmLeg.ARM.value]
+        return self.jav_home_pos.arm_joints_number
     
     @property
     def ARM_NUMBER(self) -> int:
@@ -70,11 +39,11 @@ class AbstractController(ABC, Node):
             Number of arms of the robot. 
             It can be 0, 1 (default) or 2.
         """
-        return self._LIMB_NUMBER[ArmLeg.ARM.value]
+        return self.jav_home_pos.arm_limb_number
     
     @property # Number of joints of the leg of robot
     def LEG_JOINTS_NUMBER(self) -> int:
-        return self._JOINTS_NUMBER[ArmLeg.LEG.value]
+        return self.jav_home_pos.leg_joints_number
     
     @property # Number of legs of the robot (-1, 0, 1 or 2)
     def LEG_NUMBER(self) -> int:
@@ -82,33 +51,21 @@ class AbstractController(ABC, Node):
             Number of legs of the robot. 
             It can be -1 (wheeled), 0 (static, default), 1 (left or right leg) or 2 (both legs).
         """
-        return self._LIMB_NUMBER[ArmLeg.LEG.value]
+        return self.jav_home_pos.leg_limb_number
     
     @property # Communication interface used by the robot controller, defined by launch argument (return the name of the interface)
     def COMMUNICATION_INTERFACE(self) -> str:
         return self._communication_interface.INTERFACE_NAME
     
     # ATTRIBUTES -------------------------------------------------------------    
-    #init_pos = ArticulationDesc() # The initial position of the robot. Should be set to the current position in the constructor (by calling set_init_position_to_current).
-    #home_pos = ArticulationDesc() # The home position of the robot (as defined by the Robot). Should be set in the YAML configuration file.
+    jav_init_pos = ct.JointAnglesValues()
+    jav_home_pos = ct.JointAnglesValues()
+    jav_current_pos = ct.JointAnglesValues()
 
-    # TODO: find a more elegant way to set the home position (why the dict is not working?)
-    _temp_left_home_pos = ArticulationDesc()
-    _temp_right_home_pos = ArticulationDesc()
+    eec_controller_pos = None
+    eec_current_pos = None
 
-    init_pos = {
-        ArmLeg.ARM.value: 
-            {
-                ArmLegSide.LEFT.value: None,
-                ArmLegSide.RIGHT.value: None
-            },
-        ArmLeg.LEG.value:
-            {
-                ArmLegSide.LEFT.value: None,
-                ArmLegSide.RIGHT.value: None
-            }
-    }
-    home_pos = init_pos.copy() # The home position of the robot (as defined by the Robot). Should be set in the YAML configuration file.
+    initialised = False
 
     # METHODS ----------------------------------------------------------------
 
@@ -133,16 +90,22 @@ class AbstractController(ABC, Node):
         self.declare_parameter('simulation_only', False)
         self.simulation_only = self.get_parameter('simulation_only').get_parameter_value().bool_value
         self.get_logger().info(f"Simulation only: {self.simulation_only}")
-
-        self._LIMB_NUMBER = {}
-        self._JOINTS_NUMBER = {}
-        self.home_pos[ArmLeg.ARM.value] = self.setting_home_position_from_parameter(ArmLeg.ARM)
-        self.home_pos[ArmLeg.LEG.value] = self.setting_home_position_from_parameter(ArmLeg.LEG)
+        
+        self.setting_home_position_from_parameter()
 
         self.create_subscribers()
         self.create_publishers()
 
-    def setting_home_position_from_parameter(self, arm_leg: ArmLeg) -> dict:
+    def _init_done(self):
+        """
+            This method should be called at the end of the init method of the child classes.
+            It sets the initialised attribute to True, to indicate that the controller is initialised.
+            It also logs a message to indicate that the controller is initialised.
+        """
+        self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")
+        self.initialised = True
+
+    def setting_home_position_from_parameter(self):
         """
             This method is used to set the home position of the robot from the parameters.
             It adapts the home position to the number of limbs and joints of the robot.
@@ -158,55 +121,32 @@ class AbstractController(ABC, Node):
             In the case where the home position is the same for both limbs, the array can contain only 
             _JOINTS_NUMBER elements.
 
+            It also sets the number of limbs and joints of the robot for the init_pos and current_joint_pos.
+
             The yaml configuration file should contain the following parameters:
             - robot_{arm_leg}_number: the number of limbs (-1, 0, 1 or 2 -- wheeled, none, solo (called left), both)
             - robot_{arm_leg}_joints_number: the number of joints of the limb
             - {arm_leg}_robot_home_position: the home position of the limb
             (where {arm_leg} is either 'arm' or 'leg')
 
-            :param arm_leg: (ArmLeg) the arm or leg side to set the home position.
-
-            :return: (dict) the home position of the robot for the given arm/leg side.
         """
-        home_pos = {
-            ArmLegSide.LEFT.value: None,
-            ArmLegSide.RIGHT.value: None
-        }
-        
-        self.declare_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ArmLeg.ARM else 0))
-        self._LIMB_NUMBER[arm_leg.value] = self.get_parameter(f'robot_{arm_leg.name.lower()}_number').get_parameter_value().integer_value
+        for arm_leg in {ct.ArmLeg.ARM, ct.ArmLeg.LEG}:
+            self.declare_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ct.ArmLeg.ARM else 0))
+            limb_number = self.get_parameter(f'robot_{arm_leg.name.lower()}_number').get_parameter_value().integer_value
+            self.jav_home_pos.set_limb_number(arm_leg, limb_number)
+            self.jav_init_pos.set_limb_number(arm_leg, limb_number)
+            self.jav_current_pos.set_limb_number(arm_leg, limb_number)
 
-        if (self._LIMB_NUMBER[arm_leg.value] <= 0):
-            return home_pos
-        
-        self.declare_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
-        self._JOINTS_NUMBER[arm_leg.value] = self.get_parameter(f'robot_{arm_leg.name.lower()}_joints_number').get_parameter_value().integer_value
+            self.declare_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
+            joint_number = self.get_parameter(f'robot_{arm_leg.name.lower()}_joints_number').get_parameter_value().integer_value
+            self.jav_home_pos.set_joints_number(arm_leg, joint_number)
+            self.jav_init_pos.set_joints_number(arm_leg, joint_number)
+            self.jav_current_pos.set_joints_number(arm_leg, joint_number)
 
-        self.declare_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
-        temp_home_pos = self.get_parameter(f'{arm_leg.name.lower()}_robot_home_position').get_parameter_value().double_array_value
-        
-        if temp_home_pos is not None and len(temp_home_pos) == self._JOINTS_NUMBER[arm_leg.value] * self._LIMB_NUMBER[arm_leg.value]:
-            # If home position contain _JOINTS_NUMBER * _LIMB_NUMBER elements, the home position is different for each limb
-            # The first _JOINTS_NUMBER elements are for the left limb, the next _JOINTS_NUMBER elements are for the right limb
-            self._temp_left_home_pos = temp_home_pos[:self._JOINTS_NUMBER[arm_leg.value]]
-            home_pos[ArmLegSide.LEFT.value] = self._temp_left_home_pos
-            if self._LIMB_NUMBER[arm_leg.value] == 2:
-                self.temp_right_home_pos = temp_home_pos[self._JOINTS_NUMBER[arm_leg.value]:]
-                home_pos[ArmLegSide.RIGHT.value] = self._temp_right_home_pos
-            else:
-                # If a home position is given for both side, but only one limb is defined, the home position is set to None for the right limb
-                home_pos[ArmLegSide.RIGHT.value] = None
-        elif temp_home_pos is not None and len(temp_home_pos) == self._JOINTS_NUMBER[arm_leg.value]:
-            # If home position contain only _JOINTS_NUMBER elements (and have more than one limb), the home position is the same for both
-            self._temp_left_home_pos = temp_home_pos
-            home_pos[ArmLegSide.LEFT.value] = self._temp_left_home_pos
-            home_pos[ArmLegSide.RIGHT.value] = self._temp_left_home_pos
-        else:
-            # If no home position is set, set to None (shouldn't happen if _LIMIT_NUMBER > 0)
-            home_pos[ArmLegSide.LEFT.value] = None
-            home_pos[ArmLegSide.RIGHT.value] = None
-        
-        return home_pos
+            self.declare_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
+            temp_home_pos = self.get_parameter(f'{arm_leg.name.lower()}_robot_home_position').get_parameter_value().double_array_value
+            if temp_home_pos != [0.0]:
+                self.jav_home_pos.set_limb_articulations_value(arm_leg=arm_leg, value=temp_home_pos)
 
     # ROS Initialisation methods
     @abstractmethod
@@ -231,7 +171,8 @@ class AbstractController(ABC, Node):
         self._communication_interface.define_subscribers({
             'joint_value_str': (self.joint_print_callback, self._communication_interface.TypeStrAlias),
             'emergency_stop': (self.emergency_stop_callback, self._communication_interface.TypeBoolAlias),
-            'joint_value': (self.joints_callback, self._communication_interface.TypeFloatArrayAlias)
+            'joint_value': (self.joints_callback, self._communication_interface.TypeFloatArrayAlias),
+            'end_effector_position': (self.end_effector_position_callback, self._communication_interface.TypeFloatArrayAlias)
         })
 
 
@@ -246,6 +187,7 @@ class AbstractController(ABC, Node):
         """
         self._communication_interface.define_publishers({
             'robot_joint_values': self._communication_interface.TypeFloatArrayAlias,
+            #'robot_end_effector_position': self._communication_interface.TypeFloatArrayAlias,
             'emergency_stop_status': self._communication_interface.TypeBoolAlias
         })
 
@@ -260,6 +202,17 @@ class AbstractController(ABC, Node):
             :param cmd: (Float32MultiArray) the new joint values received by the robot. The joint values are received as a list of 6 float values, 
                         representing the joint angles in degree. The first value in the list is the arm_id, then the joint values. Hence, the list 
                         length is equal to the number of joints + 1.
+        """
+        pass
+
+    @abstractmethod
+    def end_effector_position_callback(self, cmd) -> None:
+        """
+            Callback method for the end effector position. It should be overriden by the child classes.
+            This method is called when the robot receives new end effector position. It should move the robot's end effector to this position.
+            Using either Inverse Kinematics or robot API built-in function, the robot should move to the new position.
+
+            :param cmd: (Float32MultiArray) the new end effector position received by the robot. The position is received as a list of 3 float values,
         """
         pass
 
@@ -288,13 +241,14 @@ class AbstractController(ABC, Node):
 
     # Robot control methods
     @abstractmethod
-    def move_robot(self, joint_values, arm_leg=ArmLeg.ARM, limb_side=ArmLegSide.LEFT) -> None:
+    def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False) -> None:
         """
             Move the robot to the given joint values. It should be overriden by the child classes.
 
-            :param joint_values: (List[float]) the joint values to move the robot to.
-            :param arm_leg: (ArmLeg) the arm or leg side to move. Default is ARM.
-            :param limb_side: (ArmLegSide) the arm id to move. Default is LEFT.
+            :param pos_or_joint_values: (List[float]) the joint values or end effector position to move the robot to.
+            :param position: (Bool) if True, the pos_or_joint_values is an end effector position. If False, it is joint values.
+            :param arm_leg: (ct.ArmLeg) the arm or leg side to move. Default is ARM.
+            :param limb_side: (ct.ArmLegSide) the arm id to move. Default is LEFT.
         """
         pass
 
@@ -304,21 +258,19 @@ class AbstractController(ABC, Node):
             It loops over all the limbs, and each side, and move them to the home position.
             The order is the following: left arm, right arm, left leg, right leg.
         """
-        for home_pos_limb in self.home_pos:
-            for home_pos in home_pos_limb:
-                if home_pos is not None:
-                    self.move_robot(home_pos)
-        #self.move_robot(self.home_pos)
+        self.__move_to(self.jav_home_pos)
 
     def move_to_init_position(self) -> None:
         """
             Move the robot to the initial position. It calls the move_robot method with the initial position.
         """
-        for init_pos_limb in self.init_pos:
-            for init_pos in init_pos_limb:
-                if init_pos is not None:
-                    self.move_robot(init_pos)
-        #self.move_robot(self.init_pos)
+        self.__move_to(self.jav_init_pos)
+
+    def __move_to(self, position):
+        for limb, limb_val in position:
+            for limb_side, limb_side_val in limb_val.items():
+                if limb_side_val is not None:
+                    self.move_robot(limb_side_val, limb, limb_side)
 
     @abstractmethod
     def set_init_position_to_current(self) -> None:
@@ -326,3 +278,24 @@ class AbstractController(ABC, Node):
             Set the initial position of the robot to the current position. It should be overriden by the child classes.
         """
         pass
+
+    @abstractmethod
+    def _transform_unity_to_robot(self, cmd):
+        """
+            This function is used to transform the end effector position and rotation from the Unity coordinate system to the robot coordinate system.
+        """
+        pass
+
+    @abstractmethod
+    def _transform_robot_to_unity(self, cmd):
+        """
+            This function is used to transform the end effector position and rotation from the robot coordinate system to the Unity coordinate system.
+        """
+        pass
+
+    # @abstractmethod
+    # def set_home_position_from_end_effector_position(self, ee_position) -> None:
+    #     """
+    #         Set the home position of the robot to the current end effector position. It should be overriden by the child classes.
+    #     """
+    #     pass
