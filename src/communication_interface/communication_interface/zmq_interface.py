@@ -1,3 +1,4 @@
+import json
 import zmq
 import yaml
 from communication_interface.abstract_interface import AbstractInterface
@@ -36,9 +37,11 @@ class ZmqInterface(AbstractInterface):
             self.ip = self._parameters['host_ip']
             self.port = self._parameters['host_port']
             self.protocol = self._parameters['protocol']
-            self.ws_path = self._parameters['ws_path']
+            self.ws_path_pub = self._parameters['ws_path_pub']
+            self.ws_path_sub = self._parameters['ws_path_sub']
 
-            self.url = f"{self.protocol}://{self.ip}:{self.port}{self.ws_path if self.protocol == 'ws' else ''}"
+            self.url_pub = f"{self.protocol}://{self.ip}:{self.port}{self.ws_path_pub if self.protocol == 'ws' else ''}"
+            self.url_sub = f"{self.protocol}://{self.ip}:{self.port}{self.ws_path_sub if self.protocol == 'ws' else ''}"
      
     def connection_to_host(self) -> None:
         self._context = zmq.Context()
@@ -46,10 +49,10 @@ class ZmqInterface(AbstractInterface):
     def define_subscribers(self, sub_list: dict) -> None: # TODO the sub_list should be added, not replaced
         if not sub_list or sub_list == {}:
             return        
-        self._subscriber_list = sub_list
+        self._subscriber_list.update(sub_list)
 
         self._subscriber = self._context.socket(zmq.SUB)
-        self._subscriber.connect(self.url)
+        self._subscriber.connect(self.url_sub)
 
         txt_topics = ""
         for topic in self._subscriber_list:
@@ -59,7 +62,7 @@ class ZmqInterface(AbstractInterface):
         self._poller = zmq.Poller()
         self._poller.register(self._subscriber, zmq.POLLIN)
 
-        self._node.get_logger().info(f"Subscriber created ({self.url})")
+        self._node.get_logger().info(f"Subscriber created ({self.url_sub})")
         self._node.get_logger().info(f"Subscribed to the following topics: {txt_topics}")       
         self._th.start()
 
@@ -68,8 +71,9 @@ class ZmqInterface(AbstractInterface):
             return
         self._publisher_list = pub_list
         self._publisher = self._context.socket(zmq.PUB)
-        self._publisher.connect(self.url)
-        self._node.get_logger().info(f"Publisher created ({self.url})")
+        self._publisher.connect(self.url_pub)
+        self._node.get_logger().info(f"Publisher created ({self.url_pub})")
+        self._node.get_logger().info(f"Publish to the following topics: {pub_list.keys()}")
 
     def publish(self, pub_topic: str, data) -> None:
          # check if the data type is good
@@ -88,7 +92,12 @@ class ZmqInterface(AbstractInterface):
             if self._subscriber in evts:
                 try:
                     topic = self._subscriber.recv_string()
-                    data = self._subscriber.recv_json()                    
+                    data = self._subscriber.recv_string()
+
+                    self._node.get_logger().info(f"Received data from topic {topic}: {data}")
+                    data = json.loads(data)
+                    self._node.get_logger().info(f"JSON data: {data}")  
+
                     if not isinstance(data, self._subscriber_list[topic][SubData.TYPE.value]):
                         data = self._subscriber_list[topic][SubData.TYPE.value](data)
                     th = threading.Thread(target=self._subscriber_list[topic][SubData.CALLBACK.value],
