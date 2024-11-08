@@ -26,6 +26,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'ros_to_zmq_bridge = communication_interface.ros_to_zmq_bridge:main',
+            'end_effector_fake_publisher = communication_interface.end_effector_fake_publisher:main',
         ],
     },
 )

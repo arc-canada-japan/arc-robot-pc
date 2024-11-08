@@ -1,0 +1,8 @@
+/**:
+   ros__parameters:
+      host_ip: '49.212.1.114' #'192.168.0.162'
+      host_port: 80
+      protocol: 'ws'
+      ws_path_pub: '/op2rob_pub'
+      ws_path_sub: '/rob2op_sub'
+      buffer_size: 1024
