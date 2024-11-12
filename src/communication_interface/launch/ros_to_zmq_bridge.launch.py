@@ -11,6 +11,8 @@ def generate_launch_description():
     # Path to your node's package and launch file
     communication_interface_dir = get_package_share_directory('communication_interface')
     network_communication_launch = os.path.join(communication_interface_dir, 'launch', 'network_communication.launch.py')
+    config_file_path = os.path.join(communication_interface_dir, 'config', 'zmq_OPERATOR.yaml')
+    fake_data_path = os.path.join(communication_interface_dir, 'misc', 'endEffectorData-mm.txt')
 
     # Declare the launch argument for enabling the fake publisher
     fake_pub_arg = DeclareLaunchArgument(
@@ -29,13 +31,13 @@ def generate_launch_description():
             launch_arguments={'communication_interface': 'ros'}.items()
         ),
 
-        # Launch your custom node
+        # Launch your custom node with the config file path
         Node(
             package='communication_interface',
             executable='ros_to_zmq_bridge',
             name='zmq_interface_node',
             output='screen',
-            parameters=[{'config_file': '/home/yoshidalab/arc_ws/arc-local/src/communication_interface/config/zmq_OPERATOR.yaml'}]
+            parameters=[{'config_file': config_file_path}]
         ),
 
         # Conditionally launch the fake publisher node
@@ -44,6 +46,7 @@ def generate_launch_description():
             executable='end_effector_fake_publisher',
             name='end_effector_fake_publisher_node',
             output='screen',
-            condition=IfCondition(LaunchConfiguration('fake_pub'))
+            parameters=[{'fake_data': fake_data_path}],
+            condition=IfCondition(LaunchConfiguration('fake_pub'))            
         ),
     ])

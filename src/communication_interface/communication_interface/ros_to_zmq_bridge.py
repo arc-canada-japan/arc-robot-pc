@@ -4,14 +4,22 @@ import zmq
 import json
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool, Float32MultiArray, String, Int64, Int32MultiArray
+from std_msgs.msg import Float32MultiArray
 from functools import partial
+import os
 
 class ZmqRosInterface(Node):
-    def __init__(self, config_file: str) -> None:
-        super().__init__(node_name='ROS_to_ZMQ_Interface')
-        self._config_file = config_file
+    def __init__(self) -> None:
+        super().__init__('ROS_to_ZMQ_Interface')
+
+        # Get the configuration file path from the ROS parameter
+        self.declare_parameter('config_file', '')
+        self._config_file = self.get_parameter('config_file').get_parameter_value().string_value
         self._parameters = None
+
+        if not self._config_file or not os.path.isfile(self._config_file):
+            self.get_logger().error(f"Invalid or missing configuration file: {self._config_file}")
+            return
 
         self.ZMQ_load_parameters()
         self.ZMQ_context = zmq.Context()
@@ -32,9 +40,9 @@ class ZmqRosInterface(Node):
         self.create_subscription(
             Float32MultiArray,
             'end_effector_position',
-            partial(self.ZMQ_publish, 'end_effector_position'),  # Wrap the callback to include the topic
+            partial(self.ZMQ_publish, 'end_effector_position'),
             10
-        )        
+        )
 
         self.ROS_pub = self.create_publisher(Float32MultiArray, 'robot_joint_values', 10)
 
@@ -42,7 +50,6 @@ class ZmqRosInterface(Node):
 
     def ZMQ_publish(self, topic: str, data: dict) -> None:
         self.socket_pub.send_string(topic, flags=zmq.SNDMORE)
-        #self.socket_pub.send_json(list(data.data))
         self.socket_pub.send_string(json.dumps(list(data.data)))
         self.get_logger().info(f"ZMQ: Published data to topic {topic}: {data}")
 
@@ -73,30 +80,26 @@ class ZmqRosInterface(Node):
 
                     self.get_logger().info(f"ZMQ: Received data from topic {topic}: {data}")
                     data = json.loads(data)
-                    self.get_logger().info(f"JSON data: {data}")  
 
                     if not isinstance(data, list):
                         data = list(data)
 
                     msg = Float32MultiArray()
                     msg.data = data
-                    self.get_logger().info(f"ROS2 message: {msg}")
-                    self.ROS_pub.publish(msg)           
+                    self.ROS_pub.publish(msg)
                 except Exception as e:
                     self.get_logger().error(f"Error while receiving data: {e}")
                     continue
 
 
+def main(args=None):
+    rclpy.init(args=args)
+    node = ZmqRosInterface()
+    rclpy.spin(node)
 
-
-def main(args=None):  
-    config_file = '/home/yoshidalab/arc_ws/arc-local/src/communication_interface/config/zmq_OPERATOR.yaml'
-    rclpy.init(args=args)    
-    zmq_interface = ZmqRosInterface(config_file)
-    rclpy.spin(zmq_interface)
-
-    zmq_interface.destroy_node()
+    node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
