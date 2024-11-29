@@ -26,7 +26,7 @@ class XarmController(AbstractController):
         self.ROT_SPEED = 10 # r/min
         self.ROT_SPEED = self.ROT_SPEED * ct.RPM_TO_DEG_S # conversion to °/s 
         self.END_EFFECTOR_EPSILON = 3 # cm
-        self.MOVE_FACTOR = 10 # multiply the user's controller position by this factor to get the robot position
+        self.MOVE_FACTOR = 1 # multiply the user's controller position by this factor to get the robot position
 
         # Setting the defaut values for the robot (since xArm is only one arm, the default values are for the left arm) to access the value simply with ".value"
         self.jav_home_pos.default_limb      = ct.ArmLeg.ARM
@@ -186,7 +186,7 @@ class XarmController(AbstractController):
             self.get_logger().info(f"3. Last controller position: {self.eec_controller_last_pos}")
             self.get_logger().info(f"4. Delta: {(self.eec_controller_pos_time.mean() - self.eec_controller_last_pos.coordinates)}")
             self.get_logger().info(f"5. New EE robot position: {new_position}")
-            self.move_robot(new_position.tolist(), position=True)        
+            self.move_robot(new_position.tolist(), position=True)
             # Update the controller position to the latest command
             #self.eec_controller_pos_time.append(cmd)
             self.eec_controller_pos_time.clear()
