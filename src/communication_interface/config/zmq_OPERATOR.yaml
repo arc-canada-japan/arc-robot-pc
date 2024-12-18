@@ -6,3 +6,10 @@
       ws_path_pub: '/op2rob_pub'
       ws_path_sub: '/rob2op_sub'
       buffer_size: 1024
+   ros_input:
+      end_effector_position: 'std_msgs/Float32MultiArray'
+      servo_on_off: 'std_msgs/Bool'
+      hand_open_close: 'std_msgs/Float32MultiArray'
+      emergency_stop: 'std_msgs/Bool'
+   ros_output:
+      robot_joint_values: 'std_msgs/Float32MultiArray'

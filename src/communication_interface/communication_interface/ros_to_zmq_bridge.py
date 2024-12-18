@@ -4,11 +4,12 @@ import zmq
 import json
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, Bool
 from functools import partial
 import os
+import importlib
 
-class ZmqRosInterface(Node):
+class RosToZmqInterface(Node):
     def __init__(self) -> None:
         super().__init__('ROS_to_ZMQ_Interface')
 
@@ -28,7 +29,9 @@ class ZmqRosInterface(Node):
 
         self.socket_sub = self.ZMQ_context.socket(zmq.SUB)
         self.socket_sub.connect(self.url_sub)
-        self.socket_sub.subscribe('robot_joint_values')
+        for topic in self.output_topic_message_map.keys():
+            self.socket_sub.subscribe(topic)
+        #self.socket_sub.subscribe('robot_joint_values')
 
         self._poller = zmq.Poller()
         self._poller.register(self.socket_sub, zmq.POLLIN)
@@ -37,21 +40,30 @@ class ZmqRosInterface(Node):
         self._th = threading.Thread(target=self.ZMQ_listening_thread, daemon=True)
         self._th.start()
 
-        self.create_subscription(
-            Float32MultiArray,
-            'end_effector_position',
-            partial(self.ZMQ_publish, 'end_effector_position'),
-            10
-        )
+        self.define_ros_subscribers()
+        self.define_ros_publishers()
 
-        self.ROS_pub = self.create_publisher(Float32MultiArray, 'robot_joint_values', 10)
+        # self.create_subscription(
+        #     Float32MultiArray,
+        #     'end_effector_position',
+        #     partial(self.ZMQ_publish, 'end_effector_position'),
+        #     10
+        # )
+
+        # self.ROS_pub = self.create_publisher(Float32MultiArray, 'robot_joint_values', 10)
 
         self.get_logger().info("ROS to ZMQ Interface has been initialized")
 
-    def ZMQ_publish(self, topic: str, data: dict) -> None:
+    def ZMQ_publish(self, topic: str, data) -> None:
+        # Convert ROS message to JSON-compatible format
+        if isinstance(data, Float32MultiArray):
+            zmq_data = list(data.data)
+        else:
+            zmq_data = data.data
+
         self.socket_pub.send_string(topic, flags=zmq.SNDMORE)
-        self.socket_pub.send_string(json.dumps(list(data.data)))
-        self.get_logger().info(f"ZMQ: Published data to topic {topic}: {data}")
+        self.socket_pub.send_string(json.dumps(zmq_data))
+        self.get_logger().info(f"ZMQ: Published data to topic {topic}: {zmq_data}")
 
     def ZMQ_load_parameters(self) -> None:
         with open(self._config_file, 'r') as f:
@@ -70,6 +82,44 @@ class ZmqRosInterface(Node):
             self.get_logger().info(f"URL for publishing: {self.url_pub}")
             self.get_logger().info(f"URL for subscribing: {self.url_sub}")
 
+            # Load ros_input and ros_output topics dynamically
+            ros_input = params['/**'].get('ros_input', {})
+            ros_output = params['/**'].get('ros_output', {})
+
+            # Helper function to dynamically import message types
+            def get_message_type(msg_type_str):
+                module_name, class_name = msg_type_str.rsplit('/', 1)
+                module = importlib.import_module(f"{module_name}.msg")
+                return getattr(module, class_name)
+
+            self.input_topic_message_map = {}
+            self.output_topic_message_map = {}
+
+            # Populate the input dictionary with topics and their respective message types
+            for topic, msg_type in ros_input.items():
+                self.input_topic_message_map[topic] = get_message_type(msg_type)
+
+            # Populate the output dictionary with topics and their respective message types
+            for topic, msg_type in ros_output.items():
+                self.output_topic_message_map[topic] = get_message_type(msg_type)
+
+            self.get_logger().info(f"Input Topic-Message Map: {self.input_topic_message_map}")
+            self.get_logger().info(f"Output Topic-Message Map: {self.output_topic_message_map}")
+
+    def define_ros_subscribers(self) -> None:
+        for topic, msg_type in self.input_topic_message_map.items():
+            self.create_subscription(
+                msg_type,
+                topic,
+                partial(self.ZMQ_publish, topic),
+                10
+            )
+
+    def define_ros_publishers(self) -> None:
+        self.ROS_pub = {}
+        for topic, msg_type in self.output_topic_message_map.items():
+            self.ROS_pub[topic] = self.create_publisher(msg_type, topic, 10)
+
     def ZMQ_listening_thread(self):
         while self.listening:
             evts = dict(self._poller.poll(timeout=100))
@@ -81,12 +131,22 @@ class ZmqRosInterface(Node):
                     self.get_logger().info(f"ZMQ: Received data from topic {topic}: {data}")
                     data = json.loads(data)
 
-                    if not isinstance(data, list):
-                        data = list(data)
+                    if topic in self.output_topic_message_map:
+                        msg_type = self.output_topic_message_map[topic]
+                        if msg_type == Float32MultiArray:
+                            msg = Float32MultiArray()
+                            if not isinstance(data, list):
+                                data = list(data)
+                            data = [float(item) for item in data]
+                            msg.data = data
+                        elif msg_type == Bool:
+                            msg = Bool()
+                            msg.data = data
+                        else:
+                            self.get_logger().error(f"Unsupported message type for topic {topic}: {msg_type}")
+                            continue
 
-                    msg = Float32MultiArray()
-                    msg.data = data
-                    self.ROS_pub.publish(msg)
+                    self.ROS_pub[topic].publish(msg)
                 except Exception as e:
                     self.get_logger().error(f"Error while receiving data: {e}")
                     continue
@@ -94,7 +154,7 @@ class ZmqRosInterface(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = ZmqRosInterface()
+    node = RosToZmqInterface()
     rclpy.spin(node)
 
     node.destroy_node()
