@@ -256,6 +256,17 @@ class XarmController(AbstractController):
         self.eec_current_pos = ct.EndEffectorCoordinates(self.arm.get_position(is_radian=False)[1][:6] if self.arm.get_position()[0] == 0 else [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # if the get_position() returns an error (not 0 for code), the position is set to [0, 0, 0]
         self.get_logger().info(f"EE Init position: {self.eec_current_pos}")
 
+    def hand_open_close_callback(self, msg):
+        arm_id = int(msg.data[0])
+        gripper_state = float(msg.data[1])
+        self.get_logger().info(f"Arm ID: {arm_id}, Gripper state: {gripper_state}")
+
+        if not self.simulation_only:
+            if arm_id == int(ct.ArmLegSide.LEFT):
+                self.arm.set_gripper_position() # TODO: implement the gripper position ; def set_gripper_position(self, pos, wait=False, speed=None, auto_enable=False, timeout=None, **kwargs):
+            else:
+                self.get_logger().error(f"Unknown arm ID: {arm_id}")
+
 def main(args=None):
     rclpy.init(args=args)
 

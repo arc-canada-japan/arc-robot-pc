@@ -172,7 +172,8 @@ class AbstractController(ABC, Node):
             'joint_value_str': (self.joint_print_callback, self._communication_interface.TypeStrAlias),
             'emergency_stop': (self.emergency_stop_callback, self._communication_interface.TypeBoolAlias),
             'joint_value': (self.joints_callback, self._communication_interface.TypeFloatArrayAlias),
-            'end_effector_position': (self.end_effector_position_callback, self._communication_interface.TypeFloatArrayAlias)
+            'end_effector_position': (self.end_effector_position_callback, self._communication_interface.TypeFloatArrayAlias),
+            'hand_open_close': (self.hand_open_close_callback, self._communication_interface.TypeFloatArrayAlias)
         })
 
 
@@ -213,6 +214,16 @@ class AbstractController(ABC, Node):
             Using either Inverse Kinematics or robot API built-in function, the robot should move to the new position.
 
             :param cmd: (Float32MultiArray) the new end effector position received by the robot. The position is received as a list of 3 float values,
+        """
+        pass
+
+    @abstractmethod
+    def hand_open_close_callback(self, cmd) -> None:
+        """
+            Callback method for the gripper/hand state (open or close). It should be overriden by the child classes.
+            This method is called when the robot receives new gripper state. It should open or close the hand gripper accordingly.
+
+            :param cmd: (Float32MultiArray) the hand gripper state (from 0.0 to 1.0). 0.0 is close, 1.0 is open. The table contain two values: the arm_id and the hand state.
         """
         pass
 
