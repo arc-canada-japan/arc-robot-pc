@@ -58,8 +58,8 @@ class RosToZmqInterface(Node):
     def ZMQ_publish(self, topic: str, data) -> None:
         # Convert ROS message to JSON-compatible format
         zmq_data = json_message_converter.convert_ros_message_to_json(data)
-        
-        self.socket_pub.send_string(topic, flags=zmq.SNDMORE)
+        zmq_data = topic+"?"+zmq_data
+        # self.socket_pub.send_string(topic, flags=zmq.SNDMORE)
         self.socket_pub.send_string(zmq_data)
         self.get_logger().info(f"ZMQ: Published data to topic {topic}: {zmq_data}")
 
@@ -123,8 +123,13 @@ class RosToZmqInterface(Node):
             evts = dict(self._poller.poll(timeout=100))
             if self.socket_sub in evts:
                 try:
-                    topic = self.socket_sub.recv_string()
-                    data = self.socket_sub.recv_string()
+                    # topic = self.socket_sub.recv_string()
+                    full_data = self.socket_sub.recv_string()
+
+                    index = full_data.find("?")
+
+                    topic = full_data[:index]
+                    data = full_data[(index+1):]
 
                     self.get_logger().info(f"ZMQ: Received data from topic {topic}: {data}")
                     data = json.loads(data)
