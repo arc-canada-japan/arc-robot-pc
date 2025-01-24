@@ -5,6 +5,7 @@ import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Bool
+from rclpy_message_converter import json_message_converter
 from functools import partial
 import os
 import importlib
@@ -56,13 +57,10 @@ class RosToZmqInterface(Node):
 
     def ZMQ_publish(self, topic: str, data) -> None:
         # Convert ROS message to JSON-compatible format
-        if isinstance(data, Float32MultiArray):
-            zmq_data = list(data.data)
-        else:
-            zmq_data = data.data
-
+        zmq_data = json_message_converter.convert_ros_message_to_json(data)
+        
         self.socket_pub.send_string(topic, flags=zmq.SNDMORE)
-        self.socket_pub.send_string(json.dumps(zmq_data))
+        self.socket_pub.send_string(zmq_data)
         self.get_logger().info(f"ZMQ: Published data to topic {topic}: {zmq_data}")
 
     def ZMQ_load_parameters(self) -> None:
@@ -94,7 +92,7 @@ class RosToZmqInterface(Node):
 
             self.input_topic_message_map = {}
             self.output_topic_message_map = {}
-
+            
             # Populate the input dictionary with topics and their respective message types
             for topic, msg_type in ros_input.items():
                 self.input_topic_message_map[topic] = get_message_type(msg_type)
@@ -133,20 +131,12 @@ class RosToZmqInterface(Node):
 
                     if topic in self.output_topic_message_map:
                         msg_type = self.output_topic_message_map[topic]
-                        if msg_type == Float32MultiArray:
-                            msg = Float32MultiArray()
-                            if not isinstance(data, list):
-                                data = list(data)
-                            data = [float(item) for item in data]
-                            msg.data = data
-                        elif msg_type == Bool:
-                            msg = Bool()
-                            msg.data = data
-                        else:
-                            self.get_logger().error(f"Unsupported message type for topic {topic}: {msg_type}")
-                            continue
+                        
+                        msg = json_message_converter.convert_json_to_ros_message(msg_type, data)
 
-                    self.ROS_pub[topic].publish(msg)
+                        self.ROS_pub[topic].publish(msg)
+                    else:
+                        self.get_logger().error(f"The topic '{topic}' not in output map")
                 except Exception as e:
                     self.get_logger().error(f"Error while receiving data: {e}")
                     continue
