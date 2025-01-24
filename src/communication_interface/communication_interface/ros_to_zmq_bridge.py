@@ -57,11 +57,11 @@ class RosToZmqInterface(Node):
 
     def ZMQ_publish(self, topic: str, data) -> None:
         # Convert ROS message to JSON-compatible format
-        zmq_data = json_message_converter.convert_ros_message_to_json(data)
-        zmq_data = topic+"?"+zmq_data
+        json_data = json_message_converter.convert_ros_message_to_json(data)
+        zmq_data = topic+"?"+json_data
         # self.socket_pub.send_string(topic, flags=zmq.SNDMORE)
         self.socket_pub.send_string(zmq_data)
-        self.get_logger().info(f"ZMQ: Published data to topic {topic}: {zmq_data}")
+        self.get_logger().info(f"ZMQ: Published data to topic {topic}: {json_data}")
 
     def ZMQ_load_parameters(self) -> None:
         with open(self._config_file, 'r') as f:
