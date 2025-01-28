@@ -111,8 +111,8 @@ class KinovaController(AbstractController):
         if not self.initialised:
             return
         
-        controller_cmd = cmd.data[:7] # Get the end effector position and quaternion from the message
-        head_cmd = cmd.data[7:] # Get the head position and quaternion from the message
+        controller_cmd = cmd[:7] # Get the end effector position and quaternion from the message
+        head_cmd = cmd[7:] # Get the head position and quaternion from the message
 
         pose_array_msg = PoseArray()
         pose_array_msg.header.stamp = self.get_clock().now().to_msg()
@@ -161,10 +161,7 @@ class KinovaController(AbstractController):
             else:
                 pass # TODO: implement the simulation
         else: # joint values
-            self.get_logger().warning("joints values not implemented for Kinova robot")
-
-        self.jav_current_pos[ct.ArmLeg.ARM] = self.arm.get_servo_angle(is_radian=False)[1][:self.ARM_JOINTS_NUMBER]
-        self._communication_interface.publish("robot_joint_values", self._transform_robot_to_unity(self.jav_current_pos.value).tolist())
+            self.get_logger().warning("joints values not implemented for Kinova robot")       
 
 
     def set_init_position_to_current(self):
