@@ -25,33 +25,50 @@ def launch_setup(context):
     communication_interface = LaunchConfiguration('communication_interface').perform(context)
     simulation_only = LaunchConfiguration('simulation_only').perform(context)
 
+    launch_dir = os.path.join(get_package_share_directory(CURRENT_PACKAGE), 'launch')
+
+    # Include minimal.launch.py
     minimal_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory(CURRENT_PACKAGE), 'launch'),
-            '/minimal.launch.py']),
+        PythonLaunchDescriptionSource([os.path.join(launch_dir, 'minimal.launch.py')]),
         launch_arguments={
-                'streaming_method': streaming_method,
-                'communication_interface': communication_interface
-            }.items()  
+            'streaming_method': streaming_method,
+            'communication_interface': communication_interface
+        }.items()
     )
 
+    # Check if the robot-specific launch file exists
+    robot_launch_file = os.path.join(launch_dir, f"{robot_name}.launch.py")
+    robot_launch = None
+    if os.path.exists(robot_launch_file):
+        robot_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([robot_launch_file])
+        )
+
+    # Define the configuration file path
     config = os.path.join(
         get_package_share_directory(CURRENT_PACKAGE),
         'config',
         robot_name + '.yaml'
     )
 
+    # Define the controller node
     node = Node(
         package=CURRENT_PACKAGE,
         executable=robot_name + '_controller',
         name=robot_name + '_controller',
         output='screen',
-        parameters=[config, {'communication_interface': communication_interface, 
-                             'simulation_only': simulation_only=="True"}
-                   ]
+        parameters=[
+            config,
+            {'communication_interface': communication_interface, 
+             'simulation_only': simulation_only == "True"}
+        ]
     )
 
-    return [minimal_launch, node]
+    # Return the components
+    actions = [minimal_launch, node]
+    if robot_launch:
+        actions.append(robot_launch)
+    return actions
 
 def generate_launch_description():
     return LaunchDescription([
