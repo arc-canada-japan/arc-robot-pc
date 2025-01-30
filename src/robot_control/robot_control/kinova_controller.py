@@ -6,6 +6,8 @@ from rclpy.node import Node
 from robot_control.abstract_controller import AbstractController
 import robot_control.controller_tools as ct
 from geometry_msgs.msg import PoseArray, Pose
+from scipy.spatial.transform import Rotation as R
+from std_srvs.srv import SetBool
 
 import time
 
@@ -21,30 +23,17 @@ class KinovaController(AbstractController):
 
         self.declare_ros_parameters()
 
-        # Setting the defaut values for the robot (since kinova is only one arm, the default values are for the left arm) to access the value simply with ".value"
-        self.jav_home_pos.default_limb      = ct.ArmLeg.ARM
-        self.jav_home_pos.default_side      = ct.ArmLegSide.LEFT
-        self.jav_init_pos.default_limb      = ct.ArmLeg.ARM
-        self.jav_init_pos.default_side      = ct.ArmLegSide.LEFT
-        self.jav_current_pos.default_limb   = ct.ArmLeg.ARM
-        self.jav_current_pos.default_side   = ct.ArmLegSide.LEFT
-
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
         self.inv_transformation_matrix = np.linalg.inv(self.transformation_matrix) # Inverse transformation matrix from Unity to robot coordinate system
 
-        if not self.simulation_only:
-            pass
-        else:
-            self.jav_init_pos.value = self.jav_home_pos.value
-            self.jav_current_pos.value = self.jav_home_pos.value
-            self.eec_current_pos = ct.EndEffectorCoordinates()
 
         self._communication_interface.define_publishers({
             'vr_pose': PoseArray
         })
 
-        self.get_logger().info(f"init_pos: {self.jav_init_pos}")
-        self.get_logger().info(f"home_pos: {self.jav_home_pos}")
+        self.client = self.create_client(SetBool, 'set_gripper_state')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for service...')
 
         self._init_done()
 
@@ -77,7 +66,20 @@ class KinovaController(AbstractController):
             It computes the robot joint values regarding the initial position of the robot,
             and it moves the robot to the new joint values.
         """
-        self.get_logger().warning("joints_callback not implemented for Kinova robot")
+        self.get_logger().warning("joints_callback not implemented for Kinova robot")    
+    
+    def _transform_robot_to_unity(self, cmd):
+        """
+            This function is used to transform the end effector position and rotation from the robot coordinate system to the Unity coordinate system.
+            The transformation is done by multiplying the position and rotation by the inverse of the transformation matrix.
+        
+            TODO: update with quaternion
+        """
+        cmd = np.array(cmd)
+        trans = np.dot(self.inv_transformation_matrix, cmd[:3]) # Apply the transformation matrix to have the good coordinate for the end effector position
+        rot = np.dot(self.inv_transformation_matrix, cmd[3:]) # Apply the transformation matrix to have the good coordinate for the end effector rotation
+        cmd = np.concatenate([trans, rot])
+        return cmd
 
     def _transform_unity_to_robot(self, cmd):
         """
@@ -86,20 +88,37 @@ class KinovaController(AbstractController):
         """
         cmd = np.array(cmd)
         trans = np.dot(self.transformation_matrix, cmd[:3]) # Apply the transformation matrix to have the good coordinate for the end effector position
-        rot = np.dot(self.transformation_matrix, cmd[3:]) # Apply the transformation matrix to have the good coordinate for the end effector rotation
-        cmd = np.concatenate([trans, rot])
+        quat = self._apply_transformation_to_quaternion(cmd[3:], self.transformation_matrix) # Apply the transformation matrix to have the good coordinate for the end effector rotation
+        cmd = np.concatenate([trans, quat])
         return cmd
-    
-    def _transform_robot_to_unity(self, cmd):
+
+    def _apply_transformation_to_quaternion(self, quaternion, transformation_matrix):
         """
-            This function is used to transform the end effector position and rotation from the robot coordinate system to the Unity coordinate system.
-            The transformation is done by multiplying the position and rotation by the inverse of the transformation matrix.
+        Apply a transformation matrix (rotation) to a quaternion.
+
+        Args:
+            quaternion (list or np.ndarray): Quaternion [w, x, y, z] to transform.
+            transformation_matrix (np.ndarray): 3x3 rotation matrix representing the transformation.
+
+        Returns:
+            np.ndarray: Transformed quaternion [w, x, y, z].
         """
-        cmd = np.array(cmd)
-        trans = np.dot(self.inv_transformation_matrix, cmd[:3]) # Apply the transformation matrix to have the good coordinate for the end effector position
-        rot = np.dot(self.inv_transformation_matrix, cmd[3:]) # Apply the transformation matrix to have the good coordinate for the end effector rotation
-        cmd = np.concatenate([trans, rot])
-        return cmd
+        # Convert quaternion to a scipy Rotation object
+        rot = R.from_quat(quaternion)  # scipy expects [x, y, z, w]
+        
+        # Get the rotation matrix from the quaternion
+        R_q = rot.as_matrix()  # Converts quaternion to a 3x3 rotation matrix
+        
+        # Apply the transformation matrix
+        R_new = transformation_matrix @ R_q  # Matrix multiplication
+
+        # Convert the resulting rotation matrix back to a quaternion
+        new_quaternion = R.from_matrix(R_new).as_quat()  # Returns [x, y, z, w]
+        
+        # Reorder to [w, x, y, z] for consistency
+        #new_quaternion = np.roll(new_quaternion, shift=1)
+        
+        return new_quaternion
 
     def end_effector_position_callback(self, cmd):
         """
@@ -110,9 +129,11 @@ class KinovaController(AbstractController):
         """
         if not self.initialised:
             return
-        
-        controller_cmd = cmd[:7] # Get the end effector position and quaternion from the message
-        head_cmd = cmd[7:] # Get the head position and quaternion from the message
+
+        #controller_cmd = self._transform_unity_to_robot(cmd[:7]) # Get the end effector position and quaternion from the message
+        #head_cmd = self._transform_unity_to_robot(cmd[7:]) # Get the head position and quaternion from the message
+        controller_cmd = cmd[:7]
+        head_cmd = cmd[7:]
 
         pose_array_msg = PoseArray()
         pose_array_msg.header.stamp = self.get_clock().now().to_msg()
@@ -165,6 +186,8 @@ class KinovaController(AbstractController):
 
 
     def set_init_position_to_current(self):
+        self.get_logger().warning("set_init_position_to_current not implemented for Kinova robot")
+        return
         temp = self.arm.get_servo_angle(is_radian=False)[1][:self.ARM_JOINTS_NUMBER]
         self.jav_init_pos[ct.ArmLeg.ARM] = temp
 
@@ -172,15 +195,30 @@ class KinovaController(AbstractController):
         self.get_logger().info(f"EE Init position: {self.eec_current_pos}")
 
     def hand_open_close_callback(self, msg):
-        arm_id = int(msg.data[0])
-        gripper_state = float(msg.data[1])
+        arm_id = int(msg[0])
+        gripper_state = float(msg[1])
         self.get_logger().info(f"Arm ID: {arm_id}, Gripper state: {gripper_state}")
+        gripper_bool = True if int(gripper_state) == 1 else False
 
         if not self.simulation_only:
-            if arm_id == int(ct.ArmLegSide.LEFT):
-                pass #self.arm.set_gripper_position() # TODO: implement the gripper position ; def set_gripper_position(self, pos, wait=False, speed=None, auto_enable=False, timeout=None, **kwargs):
+            if arm_id == int(ct.ArmLegSide.LEFT.value) or arm_id == int(ct.ArmLegSide.RIGHT.value):
+                self.send_request(gripper_bool)
             else:
                 self.get_logger().error(f"Unknown arm ID: {arm_id}")
+
+    def send_request(self, state: bool):
+        req = SetBool.Request()
+        req.data = state  # True to close, False to open
+
+        future = self.client.call_async(req)
+        future.add_done_callback(self.response_callback)
+
+    def response_callback(self, future):
+        try:
+            response = future.result()
+            self.get_logger().info(f"Response: Success={response.success}, Message={response.message}")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
