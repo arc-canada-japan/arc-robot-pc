@@ -8,6 +8,7 @@ from ament_index_python.packages import get_package_share_directory
 CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def generate_launch_description():
+    #return LaunchDescription()
     # Path to the `moveit_vel_control_node.launch.py` file
     moveit_launch_file = os.path.join(
         get_package_share_directory('move_it_node'),
