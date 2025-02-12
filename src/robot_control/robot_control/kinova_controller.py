@@ -26,19 +26,25 @@ class KinovaController(AbstractController):
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
         self.inv_transformation_matrix = np.linalg.inv(self.transformation_matrix) # Inverse transformation matrix from Unity to robot coordinate system
 
+        self.kinova_tracking_enabled = False
+
 
         self._communication_interface.define_publishers({
             'vr_pose': PoseArray
         })
 
-        self.client = self.create_client(SetBool, 'set_gripper_state')
+        self.client = self.create_client(SetBool, 'set_gripper_state')        
         while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for service...')
+
+        self.client_tracking = self.create_client(SetBool, 'toggle_tracking')
+        while not self.client_tracking.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for service...')
 
         self._init_done()
 
     def __del__(self):
-        if not self.simulation_only and self.arm is not None:
+        if not self.simulation_only:
             pass
 
     def declare_ros_parameters(self):
@@ -176,7 +182,7 @@ class KinovaController(AbstractController):
             TODO: The speed and acceleration values are to be changed.
         """
         if position: # end effector position
-            self.get_logger().info(f"Moving EE of robot to: {pos_or_joint_values}")
+            #self.get_logger().info(f"Moving EE of robot to: {pos_or_joint_values}")
             if not self.simulation_only:
                 self._communication_interface.publish("vr_pose", pos_or_joint_values)
             else:
@@ -206,11 +212,31 @@ class KinovaController(AbstractController):
             else:
                 self.get_logger().error(f"Unknown arm ID: {arm_id}")
 
+    def controller_activated_callback(self, msg):
+        arm_id = int(msg[0])
+        controller_state = (float(msg[1]) == 1.0)
+
+        if not self.simulation_only:
+            if arm_id == int(ct.ArmLegSide.LEFT.value) or arm_id == int(ct.ArmLegSide.RIGHT.value):
+                if self.kinova_tracking_enabled != controller_state: 
+                    self.send_request_tracking(True)
+                    self.kinova_tracking_enabled = controller_state
+                    self.get_logger().info(f"Arm ID: {arm_id}, controller state: {controller_state}")
+            else:
+                self.get_logger().error(f"Unknown arm ID: {arm_id}")
+
     def send_request(self, state: bool):
         req = SetBool.Request()
         req.data = state  # True to close, False to open
 
         future = self.client.call_async(req)
+        future.add_done_callback(self.response_callback)
+
+    def send_request_tracking(self, state: bool):
+        req = SetBool.Request()
+        req.data = state  # True to close, False to open
+
+        future = self.client_tracking.call_async(req)
         future.add_done_callback(self.response_callback)
 
     def response_callback(self, future):
