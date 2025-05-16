@@ -7,6 +7,7 @@ from std_msgs.msg import String, Bool, Float32MultiArray
 from enum import Enum
 from communication_interface import * # Import all classes from the communication_interface package (no need to use the module name)
 import robot_control.controller_tools as ct
+import time
 
 class AbstractController(ABC, Node):
     """
@@ -175,6 +176,7 @@ class AbstractController(ABC, Node):
             'end_effector_position': (self.end_effector_position_callback, self._communication_interface.TypeFloatArrayAlias),
             'hand_open_close': (self.hand_open_close_callback, self._communication_interface.TypeFloatArrayAlias),
             'controller_activated': (self.controller_activated_callback, self._communication_interface.TypeFloatArrayAlias),
+            'current_timestamp_operator_ms': (self.current_time_operator_callback, self._communication_interface.TypeIntAlias)
         })
 
 
@@ -190,7 +192,8 @@ class AbstractController(ABC, Node):
         self._communication_interface.define_publishers({
             'robot_joint_values': self._communication_interface.TypeFloatArrayAlias,
             #'robot_end_effector_position': self._communication_interface.TypeFloatArrayAlias,
-            'emergency_stop_status': self._communication_interface.TypeBoolAlias
+            'emergency_stop_status': self._communication_interface.TypeBoolAlias,
+            'current_timestamp_robot_ms': self._communication_interface.TypeIntAlias
         })
 
     # ROS Callback methods
@@ -260,6 +263,20 @@ class AbstractController(ABC, Node):
             :param msg: (String) the joint values as string.
         """
         self.get_logger().info('"%s"' % msg)
+
+    def current_time_operator_callback(self, msg) -> None:
+        """
+            Callback method for the current time of the operator. It computes the delay between the robot and the operator.
+        
+            :param msg: (Int) the current time of the operator as a POSIX timestamp (in millisecond).
+        """
+        operator_time = msg.data
+        robot_time = round(time.time_ns() / 10**6)
+        time_diff = robot_time - operator_time
+        self.get_logger().info(f"Delay: {time_diff} ms")
+
+        # Publish robot time
+        self._communication_interface.publish('current_timestamp_robot_ms', robot_time)
 
     # Robot control methods
     @abstractmethod
