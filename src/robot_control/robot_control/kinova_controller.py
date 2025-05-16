@@ -22,26 +22,14 @@ class KinovaController(AbstractController):
         super().__init__(robot_name="kinova")
 
         self.declare_ros_parameters()
+        self.define_services()
 
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
         self.inv_transformation_matrix = np.linalg.inv(self.transformation_matrix) # Inverse transformation matrix from Unity to robot coordinate system
 
         self.kinova_tracking_enabled = False
 
-
-        self._communication_interface.define_publishers({
-            'vr_pose': PoseArray
-        })
-
-        self.client = self.create_client(SetBool, 'set_gripper_state')        
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for service...')
-
-        self.client_tracking = self.create_client(SetBool, 'toggle_tracking')
-        while not self.client_tracking.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for service...')
-
-        self._init_done()
+        self._init_done() # last function to call in the constructor
 
     def __del__(self):
         if not self.simulation_only:
@@ -52,6 +40,29 @@ class KinovaController(AbstractController):
             Declare the ROS parameters used by the controller.
         """
         pass
+
+    def create_publishers(self):
+        """
+            Create the publishers used by the controller.
+        """
+        super().create_publishers()
+
+        self._communication_interface.define_publishers({
+            'vr_pose': PoseArray
+        })
+
+    def define_services(self):
+        """
+            Define the services used by the controller.
+        """
+        self.client = self.create_client(SetBool, 'set_gripper_state')        
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for gripper service...')
+
+        self.client_tracking = self.create_client(SetBool, 'toggle_tracking')
+        while not self.client_tracking.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for tracking service...')
+
 
     def emergency_stop_callback(self, msg):
         """
@@ -138,32 +149,35 @@ class KinovaController(AbstractController):
 
         #controller_cmd = self._transform_unity_to_robot(cmd[:7]) # Get the end effector position and quaternion from the message
         #head_cmd = self._transform_unity_to_robot(cmd[7:]) # Get the head position and quaternion from the message
-        controller_cmd = cmd[:7]
-        head_cmd = cmd[7:]
+        eec_controller = ct.EndEffectorCoordinates(cmd[:7])
+        eec_head = ct.EndEffectorCoordinates(cmd[7:])
+        # controller_cmd = cmd[:7]
+        # head_cmd = cmd[7:]
 
         pose_array_msg = PoseArray()
         pose_array_msg.header.stamp = self.get_clock().now().to_msg()
         pose_array_msg.header.frame_id = "world"
 
-        head_pos_msg = Pose()
-        head_pos_msg.position.x = head_cmd[0]
-        head_pos_msg.position.y = head_cmd[1]
-        head_pos_msg.position.z = head_cmd[2]
-        head_pos_msg.orientation.x = head_cmd[3]
-        head_pos_msg.orientation.y = head_cmd[4]
-        head_pos_msg.orientation.z = head_cmd[5]
-        head_pos_msg.orientation.w = head_cmd[6]
+        # head_pos_msg = Pose()
+        # head_pos_msg.position.x = head_cmd[0]
+        # head_pos_msg.position.y = head_cmd[1]
+        # head_pos_msg.position.z = head_cmd[2]
+        # head_pos_msg.orientation.x = head_cmd[3]
+        # head_pos_msg.orientation.y = head_cmd[4]
+        # head_pos_msg.orientation.z = head_cmd[5]
+        # head_pos_msg.orientation.w = head_cmd[6]
 
-        hand_pos_msg = Pose()
-        hand_pos_msg.position.x = controller_cmd[0]
-        hand_pos_msg.position.y = controller_cmd[1]
-        hand_pos_msg.position.z = controller_cmd[2]
-        hand_pos_msg.orientation.x = controller_cmd[3]
-        hand_pos_msg.orientation.y = controller_cmd[4]
-        hand_pos_msg.orientation.z = controller_cmd[5]
-        hand_pos_msg.orientation.w = controller_cmd[6]
+        # hand_pos_msg = Pose()
+        # hand_pos_msg.position.x = controller_cmd[0]
+        # hand_pos_msg.position.y = controller_cmd[1]
+        # hand_pos_msg.position.z = controller_cmd[2]
+        # hand_pos_msg.orientation.x = controller_cmd[3]
+        # hand_pos_msg.orientation.y = controller_cmd[4]
+        # hand_pos_msg.orientation.z = controller_cmd[5]
+        # hand_pos_msg.orientation.w = controller_cmd[6]
 
-        pose_array_msg.poses = [head_pos_msg, hand_pos_msg]
+        # pose_array_msg.poses = [head_pos_msg, hand_pos_msg]
+        pose_array_msg.poses = [eec_head.to_pose_msg(), eec_controller.to_pose_msg()]
 
         self.move_robot(pose_array_msg, position=True)
 

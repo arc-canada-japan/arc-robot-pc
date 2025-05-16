@@ -36,7 +36,7 @@ def launch_setup(context):
         }.items()
     )
 
-    # Check if the robot-specific launch file exists
+    # Check if the robot-specific launch file exists (not all robots have one)
     robot_launch_file = os.path.join(launch_dir, f"{robot_name}.launch.py")
     robot_launch = None
     if os.path.exists(robot_launch_file):
