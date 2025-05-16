@@ -166,7 +166,7 @@ class AbstractController(ABC, Node):
 
             It uses the interface selected in the communication_interface parameter. See the package communication_interface for more details.
 
-            It can be overriden by the child classes to add more subscriptions.            
+            It can be overriden by the child classes to add more subscriptions (but the super class should be called, i.e. this one).            
         """
         self._communication_interface.define_subscribers({
             'joint_value_str': (self.joint_print_callback, self._communication_interface.TypeStrAlias),
@@ -183,7 +183,7 @@ class AbstractController(ABC, Node):
             Create the publishers needed by the robot controller. It creates the minimal publishers, including:
              * the joint values to send to the Operator PC.
 
-            It can be overriden by the child classes to add more publishers.
+            It can be overriden by the child classes to add more publishers (but the super class should be called, i.e. this one).
            
             It uses the interface selected in the communication_interface parameter. See the package communication_interface for more details.
         """

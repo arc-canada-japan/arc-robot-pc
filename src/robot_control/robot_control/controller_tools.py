@@ -2,6 +2,8 @@ from enum import Enum
 import array
 import numpy as np
 from collections import deque
+import scipy.spatial.transform as transform
+from geometry_msgs.msg import PoseArray, Pose  # ROS2 classes
 
 RPM_TO_RAD_S = 0.10472 # mutiply with a rpm value to get the rad/s value
 RPM_TO_DEG_S = 6 # mutiply with a rpm value to get the °/s value
@@ -324,7 +326,6 @@ class DataBuffer(deque):
 
 
 class EndEffectorCoordinates:
-
     @property
     def position(self):
         return self._position
@@ -349,7 +350,7 @@ class EndEffectorCoordinates:
 
     @orientation.setter
     def orientation(self, value):
-        if len(value) != 3:
+        if len(value) not in [3, 4]:
             raise ValueError(f"Invalid orientation: {value}")
         self._orientation = np.array(value)
 
@@ -376,26 +377,60 @@ class EndEffectorCoordinates:
 
     @property
     def roll(self):
-        return self._orientation[0]
+        return self._orientation[0] if len(self._orientation) == 3 else self.quaternion_to_euler()[0]
     @roll.setter
     def roll(self, value):
-        self._orientation[0] = value
+        if len(self._orientation) == 3:
+            self._orientation[0] = value
 
     @property
     def pitch(self):
-        return self._orientation[1]
+        return self._orientation[1] if len(self._orientation) == 3 else self.quaternion_to_euler()[1]
     @pitch.setter
     def pitch(self, value):
-        self._orientation[1] = value
+        if len(self._orientation) == 3:
+            self._orientation[1] = value
 
     @property
     def yaw(self):
-        return self._orientation[2]
+        return self._orientation[2] if len(self._orientation) == 3 else self.quaternion_to_euler()[2]
     @yaw.setter
     def yaw(self, value):
-        self._orientation[2] = value
+        if len(self._orientation) == 3:
+            self._orientation[2] = value
+
+    @property
+    def qx(self):
+        return self._orientation[0] if len(self._orientation) == 4 else self.euler_to_quaternion()[0]
+    @qx.setter
+    def qx(self, value):
+        if len(self._orientation) == 4:
+            self._orientation[0] = value
+
+    @property
+    def qy(self):
+        return self._orientation[1] if len(self._orientation) == 4 else self.euler_to_quaternion()[1]
+    @qy.setter
+    def qy(self, value):
+        if len(self._orientation) == 4:
+            self._orientation[1] = value
+
+    @property
+    def qz(self):
+        return self._orientation[2] if len(self._orientation) == 4 else self.euler_to_quaternion()[2]
+    @qz.setter
+    def qz(self, value):
+        if len(self._orientation) == 4:
+            self._orientation[2] = value
+
+    @property
+    def qw(self):
+        return self._orientation[3] if len(self._orientation) == 4 else self.euler_to_quaternion()[3]
+    @qw.setter
+    def qw(self, value):
+        if len(self._orientation) == 4:
+            self._orientation[3] = value
     
-    # ----------------------------
     def __init__(self, value=None) -> None:
         if value is not None:
             self.from_list(value)
@@ -403,17 +438,36 @@ class EndEffectorCoordinates:
             self.zeros()
 
     def from_list(self, value):
-        if len(value) != 6:
+        if len(value) == 6:
+            self._position = np.array(value[:3])
+            self._orientation = np.array(value[3:])
+        elif len(value) == 7:
+            self._position = np.array(value[:3])
+            self._orientation = np.array(value[3:])
+        else:
             raise ValueError(f"Invalid coordinates: {value}")
-        self._position = np.array(value[:3])
-        self._orientation = np.array(value[3:])
 
     def fill(self, value):
         self._position = np.full(3, value)
-        self._orientation = np.full(3, value)
+        self._orientation = np.full(4 if len(self._orientation) == 4 else 3, value)
 
     def zeros(self):
-        self.fill(0.0)
+        self._position = np.zeros(3)
+        self._orientation = np.array([0.0, 0.0, 0.0, 1.0]) if len(self._orientation) == 4 else np.zeros(3)
+
+    def quaternion_to_euler(self):
+        if len(self._orientation) == 4:
+            rot = transform.Rotation.from_quat(self._orientation)
+            return rot.as_euler('xyz')
+        else:
+            return self._orientation
+
+    def euler_to_quaternion(self):
+        if len(self._orientation) == 3:
+            rot = transform.Rotation.from_euler('xyz', self._orientation)
+            return rot.as_quat()
+        else:
+            return self._orientation
 
     def to_list(self):
         return self.coordinates.tolist()
@@ -425,7 +479,7 @@ class EndEffectorCoordinates:
         if isinstance(key, int):
             if key < 3:
                 return self._position[key]
-            elif key < 6:
+            elif key < len(self.coordinates):
                 return self._orientation[key - 3]
             else:
                 raise IndexError(f"Index out of range: {key}")
@@ -440,14 +494,24 @@ class EndEffectorCoordinates:
         if isinstance(key, int):
             if key < 3:
                 self._position[key] = value
-            elif key < 6:
+            elif key < len(self.coordinates):
                 self._orientation[key - 3] = value
             else:
                 raise IndexError(f"Index out of range: {key}")
         elif key == 'position':
-            self._position = value
+            self._position = np.array(value)
         elif key == 'orientation':
-            self._orientation = value
+            if len(value) not in [3, 4]:
+                raise ValueError(f"Invalid orientation: {value}")
+            self._orientation = np.array(value)
+        else:
+            raise AttributeError(f"Invalid key: {key}")
+        
+    def to_pose_msg(self):
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = self._position
+        pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = self._orientation if len(self._orientation) == 4 else self.euler_to_quaternion()
+        return pose
 
     def __iter__(self):
         return iter(self._position)

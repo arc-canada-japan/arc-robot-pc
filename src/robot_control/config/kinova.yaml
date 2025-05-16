@@ -3,3 +3,8 @@
       robot_arm_joints_number: 6 # Number of joints of the robot per arm
       robot_arm_number: 1 # Number of arms of the robot
       arm_robot_home_position: [0.0, 20.0, -50.0, 0.0, 30.0, 0.0] # Origin of each joints of the robot in degrees
+      robot_ip: '192.168.1.217' # IP of the robot -- NOT IMPLEMENTED YET
+      robot_user: 'admin' # User of the robot -- NOT IMPLEMENTED YET
+      robot_password: 'admin' # Password of the robot -- NOT IMPLEMENTED YET
+      robot_tcp_port: 10000 # Port of the robot (TCP) -- NOT IMPLEMENTED YET
+      robot_udp_port: 10001 # Port of the robot (UDP) -- NOT IMPLEMENTED YET
