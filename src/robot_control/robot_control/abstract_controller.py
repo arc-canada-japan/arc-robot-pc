@@ -4,6 +4,7 @@ import copy
 from rclpy.node import Node
 from typing import List
 from std_msgs.msg import String, Bool, Float32MultiArray
+from rclpy.parameter import Parameter, parameter_value_to_python
 from enum import Enum
 from communication_interface import * # Import all classes from the communication_interface package (no need to use the module name)
 import robot_control.controller_tools as ct
@@ -83,14 +84,11 @@ class AbstractController(ABC, Node):
         super().__init__(node_name=self.ROBOT_NAME+'_controller')
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER =========")
 
-        self.declare_parameter('communication_interface', "ros")
-        communication_interface = self.get_parameter('communication_interface').get_parameter_value().string_value
+        communication_interface = self.declare_and_get_ros_parameter('communication_interface', "ros")
         CommunicationInterfaceClass = globals()[communication_interface.capitalize()+'Interface']
         self._communication_interface = CommunicationInterfaceClass(self)
 
-        self.declare_parameter('simulation_only', False)
-        self.simulation_only = self.get_parameter('simulation_only').get_parameter_value().bool_value
-        self.get_logger().info(f"Simulation only: {self.simulation_only}")
+        self.simulation_only = self.declare_and_get_ros_parameter('simulation_only', False, log=True)
         
         self.setting_home_position_from_parameter()
 
@@ -132,31 +130,52 @@ class AbstractController(ABC, Node):
 
         """
         for arm_leg in {ct.ArmLeg.ARM, ct.ArmLeg.LEG}:
-            self.declare_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ct.ArmLeg.ARM else 0))
-            limb_number = self.get_parameter(f'robot_{arm_leg.name.lower()}_number').get_parameter_value().integer_value
+            limb_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ct.ArmLeg.ARM else 0))
             self.jav_home_pos.set_limb_number(arm_leg, limb_number)
             self.jav_init_pos.set_limb_number(arm_leg, limb_number)
             self.jav_current_pos.set_limb_number(arm_leg, limb_number)
 
-            self.declare_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
-            joint_number = self.get_parameter(f'robot_{arm_leg.name.lower()}_joints_number').get_parameter_value().integer_value
+            joint_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
             self.jav_home_pos.set_joints_number(arm_leg, joint_number)
             self.jav_init_pos.set_joints_number(arm_leg, joint_number)
             self.jav_current_pos.set_joints_number(arm_leg, joint_number)
 
-            self.declare_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
-            temp_home_pos = self.get_parameter(f'{arm_leg.name.lower()}_robot_home_position').get_parameter_value().double_array_value
+            temp_home_pos = self.declare_and_get_ros_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
             if temp_home_pos != [0.0]:
                 self.jav_home_pos.set_limb_articulations_value(arm_leg=arm_leg, value=temp_home_pos)
 
     # ROS Initialisation methods
     @abstractmethod
-    def declare_ros_parameters(self) -> None:
+    def set_ros_parameters(self) -> None:
         """
-            Declare the ROS parameters needed by the robot controller, and that are specific.
+            Set the ROS parameters needed by the robot controller, and that are specific.
             It should be overriden by the child classes.
         """
         pass
+
+    def declare_and_get_ros_parameter(self, parameter_name: str, default_value=None, parameter_descriptor=None, log=False):
+        """
+            Declares a ROS parameter and retrieves its value in Python-native format.
+
+            This function declares a parameter with the given name and default value,
+            retrieves its value from the ROS parameter server, converts it to a native
+            Python type, and optionally logs the parameter's name and value.
+
+            Args:
+                parameter_name (str): The name of the parameter to declare and retrieve.
+                default_value (Any, optional): The default value to assign if the parameter is not set. Defaults to None.
+                parameter_descriptor (rcl_interfaces.msg.ParameterDescriptor, optional): Descriptor providing metadata about the parameter. Defaults to None.
+                log (bool, optional): If True, logs the parameter name and value. Defaults to False.
+
+            Returns:
+                Any: The value of the parameter converted to its corresponding Python type.
+        """
+        self.declare_parameter(parameter_name, default_value, descriptor=parameter_descriptor)
+        val = self.get_parameter(parameter_name).get_parameter_value()
+        val = parameter_value_to_python(val)
+        if log: self.get_logger().info(f"{parameter_name}: {val}")
+
+        return val
 
     def create_subscribers(self) -> None:
         """
