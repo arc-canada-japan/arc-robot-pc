@@ -20,7 +20,7 @@ class XarmController(AbstractController):
     def __init__(self):
         super().__init__(robot_name="xarm")
 
-        self.declare_ros_parameters()
+        self.set_ros_parameters()
 
         self.TRANS_SPEED = 100 # mm/s
         self.ROT_SPEED = 10 # r/min
@@ -45,6 +45,7 @@ class XarmController(AbstractController):
         if not self.simulation_only:
             try:
                 self.arm = XArmAPI(self.ip, is_radian=False)
+                self.get_logger().info(f"Connected to xARM ({self.ip})")
             except Exception as e:
                 self.get_logger().error("Impossible to connect to the robot: " + str(e))
                 self.arm = None
@@ -77,20 +78,19 @@ class XarmController(AbstractController):
         self._init_done()
 
     def __del__(self):
-        if not self.simulation_only and self.arm is not None:
+        if not self.simulation_only and hasattr(self, 'arm') and self.arm is not None:
             self.arm.set_state(4)
             #self.arm.set_mode(0)
             #self.arm.set_state(0)
             #self.arm.move_gohome(wait=True)
             self.arm.disconnect()
 
-    def declare_ros_parameters(self):
+    def set_ros_parameters(self):
         """
-            Declare the ROS parameters used by the controller.
+            Set the ROS parameters used by the controller.
         """
         # Get the robot IP address from the parameter send by the launch file
-        self.declare_parameter('robot_ip', '192.168.1.217')
-        self.ip = self.get_parameter('robot_ip').get_parameter_value().string_value
+        self.ip = self.declare_and_get_ros_parameter('robot_ip', '192.168.1.217')
 
     def emergency_stop_callback(self, msg):
         """
@@ -193,7 +193,11 @@ class XarmController(AbstractController):
             self.eec_controller_last_pos.coordinates = cmd
             self.get_logger().info(f"8. New last controller position: {self.eec_controller_last_pos.coordinates}")
 
+    def controller_activated_callback(self, cmd):
+        pass # TODO
+
     def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):
+        self.get_logger().info(f"Moving joint of robot to: {pos_or_joint_values}")
         """
             Move the robot to the given joint values or end effector position.
             The joint values are received as a list of 6 float values, representing the joint angles in degree.
@@ -230,7 +234,6 @@ class XarmController(AbstractController):
             else:
                 pass # TODO: implement the simulation
         else: # joint values
-            self.get_logger().info(f"Moving joint of robot to: {pos_or_joint_values}")
             if not self.simulation_only:
                 try:
                     self.arm.set_state(4)
