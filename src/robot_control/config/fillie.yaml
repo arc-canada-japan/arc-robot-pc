@@ -1,0 +1,18 @@
+/**:
+   ros__parameters:
+      robot_arm_joints_number: 6 # Number of joints of the robot per arm
+      robot_arm_number: 2 # Number of arms of the robot
+      robot_ip: '192.168.128.55' # IP of the robot bridge
+      robot_speed: 100
+      robot_wait_queue_size: 2
+      arm_robot_home_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # Origin of each joints of the robot in degrees
+      mirrored: True
+      control_source: "unity"
+      use_hand: True
+      limit_left: [[250.0, 550.0], [-200.0, 400.0], [300.0, 450.0], [-45.0, 45.0], [-45.0, 45.0], [-45.0, 45.0]]
+      limit_right: [[250.0, 550.0], [-400.0, 200.0], [300.0, 450.0], [-45.0, 45.0], [-45.0, 45.0], [-45.0, 45.0]]
+      offset_left: [300,  200, 184.6, 0.0, 0.0, 0.0]
+      offset_right: [300, -200, 184.6, 0.0, 0.0, 0.0]
+      gain_left: 0.5
+      gain_right: 0.5
+      omit_orientation: True
