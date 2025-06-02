@@ -191,10 +191,7 @@ class XarmController(AbstractController):
             #self.eec_controller_pos_time.append(cmd)
             self.eec_controller_pos_time.clear()
             self.eec_controller_last_pos.coordinates = cmd
-            self.get_logger().info(f"8. New last controller position: {self.eec_controller_last_pos.coordinates}")
-
-    def controller_activated_callback(self, cmd):
-        pass # TODO
+            self.get_logger().info(f"8. New last controller position: {self.eec_controller_last_pos.coordinates}")  
 
     def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):
         self.get_logger().info(f"Moving joint of robot to: {pos_or_joint_values}")
