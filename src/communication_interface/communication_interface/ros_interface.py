@@ -5,6 +5,7 @@ from std_msgs.msg import Bool, Float32MultiArray, String, Int64, Int32MultiArray
 import enum
 from functools import partial
 import threading
+from rclpy.qos import QoSProfile
 
 class PubData(enum.Enum):
     PUB = 0
@@ -57,6 +58,40 @@ class RosInterface(AbstractInterface):
             self._publisher_list[pub_topic][PubData.PUB.value].publish(data)
         except TypeError as e:
             self._node.get_logger().error(f"Error while publishing the data, the given type is wrong: {e}")
+
+    def modify_qos_for_topic(self, topic: str, new_qos: QoSProfile, new_callback=None) -> None:
+        """
+        Recreate the subscriber for the given topic with a new QoS profile.
+
+        :param topic: The topic to modify.
+        :param new_qos: The new QoSProfile.
+        :param new_callback: Optional new callback function. If None, the existing one will be used.
+        """
+        if topic not in self._subscriber_list:
+            self._node.get_logger().error(f"No subscriber found for topic '{topic}'")
+            return
+
+        # Get the old callback and type
+        old_callback, old_subscription = self._subscriber_list[topic]
+        sub_type = old_subscription.msg_type
+
+        # Destroy the old subscription
+        self._node.destroy_subscription(old_subscription)
+
+        # If no new callback is provided, use the existing one
+        if new_callback is None:
+            new_callback = old_callback
+
+        # Create a new callback with partial (same as in define_subscribers)
+        callback_with_topic = partial(self._common_callback, topic=topic)
+        
+        # Create the new subscription
+        new_subscription = self._node.create_subscription(
+            sub_type,
+            topic,
+            callback_with_topic,
+            new_qos
+        )
 
     def _common_callback(self, msg, topic):
         """
