@@ -1,0 +1,39 @@
+robot_arm_joints_number: 
+  en: Number of joints of the robot per arm
+  fr: Nombre des articulations du robot pour chaque bras
+  ja: ロボットの腕あたりの関節数
+
+robot_arm_number: 
+  en: Number of arms of the robot
+  fr: Nombre de bras du robot
+  ja: ロボットの腕の数
+
+arm_robot_home_position: 
+  en: Origin of each joints of the robot in degrees
+  fr: Position d'origine de chaque articulation du robot (en degrés)
+  ja: ロボットの各関節の原点（度単位）
+
+robot_ip: 
+  en: IP of the robot -- NOT IMPLEMENTED YET
+  fr: Adresse IP du robot -- PAS ENCORE IMPLÉMENTÉ
+  ja: ロボットのIPアドレス -- 未実装
+
+robot_user: 
+  en: User of the robot -- NOT IMPLEMENTED YET
+  fr: Utilisateur du robot -- PAS ENCORE IMPLÉMENTÉ
+  ja: ロボットのユーザー -- 未実装
+
+robot_password: 
+  en: Password of the robot -- NOT IMPLEMENTED YET
+  fr: Mot de passe du robot -- PAS ENCORE IMPLÉMENTÉ
+  ja: ロボットのパスワード -- 未実装
+
+robot_tcp_port: 
+  en: Port of the robot (TCP) -- NOT IMPLEMENTED YET
+  fr: Port du robot (TCP) -- PAS ENCORE IMPLÉMENTÉ
+  ja: ロボットのポート（TCP） -- 未実装
+
+robot_udp_port: 
+  en: Port of the robot (UDP) -- NOT IMPLEMENTED YET
+  fr: Port du robot (UDP) -- PAS ENCORE IMPLÉMENTÉ
+  ja: ロボットのポート（UDP） -- 未実装
