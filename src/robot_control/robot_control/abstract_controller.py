@@ -9,7 +9,6 @@ from enum import Enum
 from communication_interface import * # Import all classes from the communication_interface package (no need to use the module name)
 import robot_control.controller_tools as ct
 import time
-from num2words import num2words
 
 class AbstractController(ABC, Node):
     """
