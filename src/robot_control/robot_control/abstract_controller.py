@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import array
 import copy
 from rclpy.node import Node
+from rclpy.exceptions import ParameterAlreadyDeclaredException
 from typing import List
 from std_msgs.msg import String, Bool, Float32MultiArray
 from rclpy.parameter import Parameter, parameter_value_to_python
@@ -113,7 +114,7 @@ class AbstractController(ABC, Node):
         self.activation_status              = ct.LimbData("empty", default_value=False, force_same_value_type=True)
         self.activation_status_has_changed  = ct.LimbData("empty", default_value=False, force_same_value_type=True)
         self.limbs_architecture             = ct.LimbData("empty", default_value=0, force_same_value_type=True)
-        #self.limbs_joint_value              = ct.LimbData("empty")
+        #self.limbs_joint_value             = ct.LimbData("empty")
         
         self.setting_robot_limbs_from_parameters()
         self.setting_home_position_from_parameter()
@@ -208,7 +209,7 @@ class AbstractController(ABC, Node):
                 raise ValueError(f"The number of {arm_leg.name.lower()} should be in [0;4]")
 
             self.activation_status.add_limbs(config, False)
-            self.limbs_architecture.add_limb(config,joint_number)
+            self.limbs_architecture.add_limbs(config,joint_number)
         self.limb_config = self.activation_status.config
         self.activation_status_has_changed = self.activation_status
 
@@ -238,7 +239,12 @@ class AbstractController(ABC, Node):
             Returns:
                 Any: The value of the parameter converted to its corresponding Python type.
         """
-        self.declare_parameter(parameter_name, default_value, descriptor=parameter_descriptor)
+        try:
+            self.declare_parameter(parameter_name, default_value, descriptor=parameter_descriptor)
+        except ParameterAlreadyDeclaredException:
+            pass
+        except Exception as e:
+            self.get_logger().error(f"Error while getting parameter {parameter_name} with default value {default_value}: {e}")
         val = self.get_parameter(parameter_name).get_parameter_value()
         val = parameter_value_to_python(val)
         if log: self.get_logger().info(f"{parameter_name}: {val}")
