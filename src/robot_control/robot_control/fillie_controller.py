@@ -1,10 +1,14 @@
 from typing import List
 import rclpy
+import sys
 from rclpy.node import Node
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from robot_control.abstract_controller import AbstractController
 import robot_control.controller_tools as ct
 
 from omniORB import CORBA
+sys.path.append("/opt")
+sys.path.append("/opt/NxApiLib/idl_NxApi")
 from NxApiLib import any as ANY
 from NxApi import *
 import numpy as np
@@ -143,9 +147,10 @@ class FillieController(AbstractController):
             - Turns off the robot's servo.
             - Releases API authority from the robot controller.
         """
-        self.robot.Execute("ServoOff", ANY.to_any(None))
-        # Release API authority
-        self.controller.Execute("ReleaseAuthority", ANY.to_any(None))
+        if not self.simulation_only and hasattr(self, 'robot') and self.robot is not None:
+            self.robot.Execute("ServoOff", ANY.to_any(None))
+            # Release API authority
+            self.controller.Execute("ReleaseAuthority", ANY.to_any(None))
 
     def set_ros_parameters(self):
         """
@@ -169,8 +174,8 @@ class FillieController(AbstractController):
         self.use_hand = self.declare_and_get_ros_parameter('use_hand', True)
 
         self.LIMITS = ct.LimbData(self.limb_config)
-        self.LIMITS[ct.ArmLegSide.LEFT] = self.declare_and_get_ros_parameter('limit_left', [[0.0, 0.0]] * 6)
-        self.LIMITS[ct.ArmLegSide.RIGHT] = self.declare_and_get_ros_parameter('limit_right', [[0.0, 0.0]] * 6)
+        self.LIMITS[ct.ArmLegSide.LEFT] = np.array(self.declare_and_get_ros_parameter('limit_left', [0.0, 0.0] * 6)).reshape((6, 2))
+        self.LIMITS[ct.ArmLegSide.RIGHT] = np.array(self.declare_and_get_ros_parameter('limit_right', [0.0, 0.0] * 6)).reshape((6, 2))
 
         self.offset = ct.LimbData(self.limb_config)
         self.offset[ct.ArmLegSide.LEFT] = ct.EndEffectorCoordinates(self.declare_and_get_ros_parameter('offset_left', [0.0] * 6))
@@ -182,10 +187,10 @@ class FillieController(AbstractController):
 
         self.omit_orientation = self.declare_and_get_ros_parameter('omit_orientation', False)
         # Check if useful and/or adapt
-        self.declare_parameter('robot_home_position', self.home_pos)
-        self.home_pos = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
+        #self.declare_parameter('robot_home_position', self.home_pos)
+        #self.home_pos = self.get_parameter('robot_home_position').get_parameter_value()._double_array_value
 
-    def _expand_gain(value):
+    def _expand_gain(self, value):
         """
             Expands a single gain value or a list of 6 values to ensure a valid gain vector for each joint.
 
