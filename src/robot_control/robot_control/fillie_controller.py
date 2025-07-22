@@ -5,10 +5,10 @@ from rclpy.node import Node
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from robot_control.abstract_controller import AbstractController
 import robot_control.controller_tools as ct
-
+sys.path.append("/opt/openrobots/lib/python3.10/site-packages")
 from omniORB import CORBA
-sys.path.append("/opt")
-sys.path.append("/opt/NxApiLib/idl_NxApi")
+sys.path.append("/opt/krc/lib")
+sys.path.append("/opt/krc/lib/NxApiLib/idl_NxApi")
 from NxApiLib import any as ANY
 from NxApi import *
 import numpy as np
@@ -74,12 +74,8 @@ class FillieController(AbstractController):
 
         self.set_ros_parameters()
 
-        # if not self.simulation_only:
-        #     self.use_hand = True            
-        # else:
-        #     self.init_pos = self.home_pos
-        #     self.ip = "127.0.0.1"
-        #     self.use_hand = False
+        self.is_moving = False
+        self.DISTANCE_FACTOR = 1 # 1000
 
         argv = [ '-ORBdefaultWCharCodeSet',
                     'UTF-16',
@@ -87,6 +83,7 @@ class FillieController(AbstractController):
                     '104857600']
             
         try:
+            self.get_logger().info("Starting to connect to Fillie...")
             # Connect to the API server
             orb = CORBA.ORB_init(argv, CORBA.ORB_ID)
             api = orb.string_to_object(f"corbaloc:iiop:1.2@{self.ip_robot}:2809/RootControllerApi")
@@ -95,6 +92,7 @@ class FillieController(AbstractController):
             self.controller = root_controller.GetNxController("", "")
             # Acquire API Authority
             self.controller.Execute("GetAuthority", ANY.to_any(None))
+            self.get_logger().info("Connected")
         except Exception as e:
             self.get_logger().error("Impossible to connect to the robot: " + str(e))
             exit(10)
@@ -119,7 +117,7 @@ class FillieController(AbstractController):
 
         # Set production speed
         self.speed_var = self.controller.GetVariable("@SPEED", "")
-        self.speed_var.Execute("SetValues", ANY.to_any([[["value", self.robot_speed]]]))
+        self.speed_var.Execute("SetValues", ANY.to_any([[["value", int(self.robot_speed)]]]))
 
         self.param_wait_motion = ANY.to_any([["queueSize", self.robot_wait_queue_size]])
 
@@ -167,7 +165,7 @@ class FillieController(AbstractController):
         # Get the robot IP address from the parameter send by the launch file
         self.ip_robot = self.declare_and_get_ros_parameter('robot_ip', '192.168.128.55')
         #self.ip_rmt = self.declare_and_get_ros_parameter('robot_ip', '192.168.128.55')
-        self.robot_speed = self.declare_and_get_ros_parameter('robot_speed', 100)
+        self.robot_speed = self.declare_and_get_ros_parameter('robot_speed', 100.0)
         self.robot_wait_queue_size = self.declare_and_get_ros_parameter('robot_wait_queue_size', 2)
         self.mirrored = self.declare_and_get_ros_parameter('mirrored', False)
         self.control_source = self.declare_and_get_ros_parameter('control_source', "unity").lower()
@@ -280,7 +278,7 @@ class FillieController(AbstractController):
                 np.ndarray: The transformed command, with position converted to millimeters.
         """
         cmd = np.array(cmd)
-        trans = np.dot(self.transformation_matrix, cmd[:3]) * 1000 # Apply the transformation matrix to have the good coordinate for the end effector position, plus convert metre to millimetre
+        trans = np.dot(self.transformation_matrix, cmd[:3]) * self.DISTANCE_FACTOR # Apply the transformation matrix to have the good coordinate for the end effector position, plus convert metre to millimetre
         rot = np.dot(self.transformation_matrix, cmd[3:]) # Apply the transformation matrix to have the good coordinate for the end effector rotation
         cmd = np.concatenate([trans, rot])
         return cmd
@@ -296,7 +294,7 @@ class FillieController(AbstractController):
                 np.ndarray: The transformed command, with position converted to meters.
         """
         cmd = np.array(cmd)
-        trans = np.dot(self.inv_transformation_matrix, cmd[:3]) / 1000 # Apply the transformation matrix to have the good coordinate for the end effector position, plus convert milliter to meter
+        trans = np.dot(self.inv_transformation_matrix, cmd[:3]) / self.DISTANCE_FACTOR # Apply the transformation matrix to have the good coordinate for the end effector position, plus convert milliter to meter
         rot = np.dot(self.inv_transformation_matrix, cmd[3:]) # Apply the transformation matrix to have the good coordinate for the end effector rotation
         cmd = np.concatenate([trans, rot])
         return cmd
@@ -326,17 +324,22 @@ class FillieController(AbstractController):
         """
         if not self.initialised:
             return
-        if len(cmd.data) != 12:
+        if len(cmd) != 12:
             self.get_logger().error(f"End effector position message is expecting 12 values, {len(cmd.data)} have been received. Operation aborted")
             return
-        
+        if self.is_moving:
+            self.get_logger().error(f"Robot in motion, received command discarded")
+            return
+        self.is_moving = True
+
         inputs = {
-            ct.ArmLegSide.LEFT: cmd.data[0:6],
-            ct.ArmLegSide.RIGHT: cmd.data[6:12]
+            ct.ArmLegSide.LEFT: cmd[0:6],
+            ct.ArmLegSide.RIGHT: cmd[6:12]
         }
+        self.get_logger().debug(f"Input values: {inputs}")
         enabled_sides = []
         for side in (ct.ArmLegSide.LEFT, ct.ArmLegSide.RIGHT):
-            if inputs[side] != [-1.0] * self.jav_home_pos.arm_joints_number:
+            if list(inputs[side]) != [-1.0] * 6: # (x,y,z,r,p,yaw = 6 values)
                 enabled_sides.append(side)
             inputs[side] = ct.EndEffectorCoordinates(self._transform_unity_to_robot(inputs[side]))
         if len(enabled_sides) == 0:
@@ -344,8 +347,10 @@ class FillieController(AbstractController):
             return
         
         for side in enabled_sides:
-            if not self.activation_status[side]:
-                break
+            # if not self.activation_status[side]:
+            #     self.get_logger().info(f"{side} not activated - abort")
+            #     break
+            self.get_logger().debug(f"Current side: {side}")
             position = ct.EndEffectorCoordinates(ANY.from_any(self.arm_pos_command_var[side].Execute("GetValues", ANY.to_any(None)))[0])
             position_opposite = ct.EndEffectorCoordinates(ANY.from_any(self.arm_pos_command_var[self._opposite(side)].Execute("GetValues", ANY.to_any(None)))[0])
             output_command = ct.EndEffectorCoordinates()
@@ -356,26 +361,27 @@ class FillieController(AbstractController):
             if self.activation_initial_pos[side] is None or self.activation_status_has_changed[side]:
                 self.activation_initial_pos[side] = inputs[side]
                 self.offset[side] = position - inputs[side]
-                self.get_logger().info(f"{side} arm acivated and reset position")
+                self.get_logger().info(f"{side} arm activated and reset position")
             output_command = self.activation_initial_pos[side] + (inputs[side] - self.activation_initial_pos[side]) * self.GAINS[side] + self.offset[side]
+            output_command = ct.EndEffectorCoordinates(output_command)
             temp_copy = output_command
-            output_command = output_command.max_elements(limits_a).min_elements(limits_b)
+            #output_command = output_command.max_elements(limits_a).min_elements(limits_b)
 
             offset = 200 if side == ct.ArmLegSide.LEFT else -200
             output_command.y = min(output_command.y, position_opposite.y + offset) # avoid crossing 2 arms
 
-            for i in range(len(output_command.coordinates)):                
-                if temp_copy[i] != output_command[i]:
-                    self.activation_initial_pos[side][i] = inputs[side][i]
-                    self.offset[side][i] = position[i] - inputs[side][i]
-                    self.get_logger().info(f"Axis {output_command.el_name(i)} exceed the limit, reset to {output_command[i]}")
+            # for i in range(len(output_command.coordinates)):                
+            #     if temp_copy[i] != output_command[i]:
+            #         self.activation_initial_pos[side][i] = inputs[side][i]
+            #         self.offset[side][i] = position[i] - inputs[side][i]
+            #         self.get_logger().info(f"Axis {output_command.el_name(i)} exceed the limit, reset to {output_command[i]}")
 
             if self.omit_orientation:
                 output_command.orientation = [0.0]*3
 
             self.move_robot(output_command.to_list(), True, limb_side=side)
     
-    def _opposite(side: ct.ArmLegSide):
+    def _opposite(self, side: ct.ArmLegSide):
         """
             Returns the opposite side for a given ArmLegSide (LEFT <-> RIGHT).
 
@@ -468,6 +474,7 @@ class FillieController(AbstractController):
                 ["csOffset", pos_or_joint_values],
                 ["next",True],
                 ["speed", self.robot_speed]])
+            self.get_logger().info(f"Speed: {self.robot_speed}")
             ret_any = self.arms[limb_side].Execute("Move", param)
             self.arms[limb_side].Execute("WaitMotion", self.param_wait_motion)
             ret = ANY.from_any(ret_any)
@@ -477,6 +484,7 @@ class FillieController(AbstractController):
             pass
 
         self.send_current_joint_value()
+        self.is_moving = False
 
     def set_init_position_to_current(self):
         """
