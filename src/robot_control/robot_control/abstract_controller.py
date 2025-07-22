@@ -111,7 +111,7 @@ class AbstractController(ABC, Node):
 
         self.simulation_only = self.declare_and_get_ros_parameter('simulation_only', False, log=True)
 
-        self.activation_status              = ct.LimbData("empty", default_value=False, force_same_value_type=True)
+        self.activation_status              = ct.LimbData("empty", default_value=True, force_same_value_type=True) # CHANGED TO TRUE
         self.activation_status_has_changed  = ct.LimbData("empty", default_value=False, force_same_value_type=True)
         self.limbs_architecture             = ct.LimbData("empty", default_value=0, force_same_value_type=True)
         #self.limbs_joint_value             = ct.LimbData("empty")
@@ -168,8 +168,8 @@ class AbstractController(ABC, Node):
             self.jav_current_pos.set_joints_number(arm_leg, joint_number)
 
             temp_home_pos = self.declare_and_get_ros_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
-            if temp_home_pos != [0.0]:
-                self.jav_home_pos.set_limb_articulations_value(arm_leg=arm_leg, value=temp_home_pos)
+            #if temp_home_pos != [0.0]:
+            #    self.jav_home_pos.set_limb_articulations_value(arm_leg=arm_leg, value=temp_home_pos)
 
     def setting_robot_limbs_from_parameters(self):
         """
@@ -208,10 +208,12 @@ class AbstractController(ABC, Node):
             else:
                 raise ValueError(f"The number of {arm_leg.name.lower()} should be in [0;4]")
 
-            self.activation_status.add_limbs(config, False)
+            self.activation_status.add_limbs(config, True) # CHANGED TO TRUE
             self.limbs_architecture.add_limbs(config,joint_number)
         self.limb_config = self.activation_status.config
         self.activation_status_has_changed = self.activation_status
+        self.activation_status_has_changed[ct.ArmLegSide.LEFT] = False # ADDED
+        self.activation_status_has_changed[ct.ArmLegSide.RIGHT] = False # ADDED
 
     # ROS Initialisation methods
     @abstractmethod
@@ -334,8 +336,9 @@ class AbstractController(ABC, Node):
 
             :param cmd: (Float32MultiArray) the controller activation state (0.0 or 1.0). 0.0 is not disabled, 1.0 is enabled.
         """
-        activation = cmd.data
-        if len(activation==2): # only one kind of limb
+        return # TEMP
+        activation = cmd
+        if len(activation)==2: # only one kind of limb
             side = ct.ArmLegSide(int(activation[0]))
             index = side
         elif len(activation==3):
@@ -345,10 +348,16 @@ class AbstractController(ABC, Node):
         else:
             self.get_logger().error(f"Activation data in wrong format, it should be an array of two or three values. Received: {new_status}. Operation aborted")
             return
+        self.get_logger().info(f"い) Activation: {activation} -- side: {side}")
         new_status = (activation[-1] == 1.0) # the value is the last
 
+        self.get_logger().info(f"ろ) Activation status obj before update: {self.activation_status}")
         prev_status = self.activation_status[index]
         self.activation_status[index] = new_status
+
+        self.get_logger().info(f"は) New Activation status: {new_status}")
+        self.get_logger().info(f"に) Prev Activation status: {prev_status}")
+        self.get_logger().info(f"ほ) Activation status obj after update: {self.activation_status}")
 
         if prev_status != new_status:
             self.get_logger().info(f"Activation button pressed: {new_status}")
@@ -385,7 +394,7 @@ class AbstractController(ABC, Node):
         
             :param msg: (Int) the current time of the operator as a POSIX timestamp (in millisecond).
         """
-        operator_time = msg.data
+        operator_time = msg
         robot_time = round(time.time_ns() / 10**6)
         time_diff = robot_time - operator_time
         self.get_logger().info(f"Delay: {time_diff} ms")
