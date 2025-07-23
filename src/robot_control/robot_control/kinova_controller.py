@@ -21,7 +21,7 @@ class KinovaController(AbstractController):
     def __init__(self):
         super().__init__(robot_name="kinova")
 
-        self.declare_ros_parameters()
+        self.set_ros_parameters()
         self.define_services()
 
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
@@ -35,9 +35,9 @@ class KinovaController(AbstractController):
         if not self.simulation_only:
             pass
 
-    def declare_ros_parameters(self):
+    def set_ros_parameters(self):
         """
-            Declare the ROS parameters used by the controller.
+            Set the ROS parameters used by the controller.
         """
         pass
 
