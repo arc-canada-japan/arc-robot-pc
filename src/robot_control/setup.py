@@ -1,6 +1,7 @@
 from glob import glob
 import os
 from setuptools import find_packages, setup
+from itertools import chain
 
 package_name = CURRENT_PACKAGE = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,7 +26,9 @@ setup(
         # Include all launch files.
         (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
         # Include all config files.
-        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml')))
+        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml'))),
+        # Include all image files.
+        (os.path.join('share', package_name, 'image'), list(chain.from_iterable(glob(os.path.join('image', ext)) for ext in ('*.png', '*.jpg', '*.jpeg'))))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
