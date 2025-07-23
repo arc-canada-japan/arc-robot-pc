@@ -1,5 +1,5 @@
 from typing import List
-
+import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -7,6 +7,7 @@ from robot_control.abstract_controller import AbstractController
 from control_msgs.msg import GripperCommand
 import robot_control.controller_tools as ct
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from std_msgs.msg import Float32MultiArray
 
 from xarm.wrapper import XArmAPI
 
@@ -18,10 +19,11 @@ class XarmController(AbstractController):
         It receives the joint values from the Operator PC and moves the robot to the new joint values.
         The values are received as a list of 6 float values, representing the joint angles in degree.
     """
-
+    print(">>> ______________XARM EN ATTENTE__________")
     def __init__(self):
         super().__init__(robot_name="xarm")
 
+        self.get_logger().info("______________XARM INITIALISED__________")
         self.declare_ros_parameters()
 
         self.TRANS_SPEED = 1 # mm/s
@@ -64,7 +66,7 @@ class XarmController(AbstractController):
 
             self.arm.set_mode(1)
             self.arm.set_state(state=0)
-            time.sleep(1)            
+            time.sleep(1)
 
             qos_profile = QoSProfile(
                 reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -99,12 +101,20 @@ class XarmController(AbstractController):
         # Get the robot IP address from the parameter send by the launch file
         self.declare_parameter('robot_ip', '192.168.1.217')
         self.ip = self.get_parameter('robot_ip').get_parameter_value().string_value
+        self.declare_parameter('effector_offset', 0)
+        self.effector_offset = self.get_parameter('effector_offset').get_parameter_value().integer_value
 
     def create_subscribers(self):
         super().create_subscribers()
         self._communication_interface.define_subscribers({
-            '/xarm6/gripper_cmd': (self.gripper_callback, GripperCommand)
-        })        
+            '/ARC/end_effector_position': (self.end_effector_position_callback, Float32MultiArray)
+        })
+        
+
+    def controller_activated_callback(self, msg):
+        #Just here to define the callback, it is not used in this controller
+	    self.get_logger().info(f"Controller activated callback triggered with: {msg}")
+
 
     def emergency_stop_callback(self, msg):
         """
@@ -170,10 +180,10 @@ class XarmController(AbstractController):
         """
         if not self.initialised:
             return
-        
-        self.ee_cmd = cmd # cmd = self._transform_unity_to_robot(cmd)
+
+        self.ee_cmd = cmd  # Use the modified command
         self.get_logger().info(f"End-effector command received: {self.ee_cmd}")
-        
+       
 
     def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):
         """
