@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import array
 import copy
+import os
+import sys
 from rclpy.node import Node
 from rclpy.exceptions import ParameterAlreadyDeclaredException
 from typing import List
@@ -111,7 +113,7 @@ class AbstractController(ABC, Node):
 
         self.simulation_only = self.declare_and_get_ros_parameter('simulation_only', False, log=True)
 
-        self.activation_status              = ct.LimbData("empty", default_value=True, force_same_value_type=True) # CHANGED TO TRUE
+        self.activation_status              = ct.LimbData("empty", default_value=False, force_same_value_type=True)
         self.activation_status_has_changed  = ct.LimbData("empty", default_value=False, force_same_value_type=True)
         self.limbs_architecture             = ct.LimbData("empty", default_value=0, force_same_value_type=True)
         #self.limbs_joint_value             = ct.LimbData("empty")
@@ -128,7 +130,7 @@ class AbstractController(ABC, Node):
             It sets the initialised attribute to True, to indicate that the controller is initialised.
             It also logs a message to indicate that the controller is initialised.
         """
-        self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")
+        self.get_logger().info("========= " + self.ROBOT_NAME + " CONTROLLER INIT DONE =========")
         self.initialised = True
 
     def setting_home_position_from_parameter(self):
@@ -336,7 +338,6 @@ class AbstractController(ABC, Node):
 
             :param cmd: (Float32MultiArray) the controller activation state (0.0 or 1.0). 0.0 is not disabled, 1.0 is enabled.
         """
-        return # TEMP
         activation = cmd
         if len(activation)==2: # only one kind of limb
             side = ct.ArmLegSide(int(activation[0]))
@@ -348,16 +349,10 @@ class AbstractController(ABC, Node):
         else:
             self.get_logger().error(f"Activation data in wrong format, it should be an array of two or three values. Received: {new_status}. Operation aborted")
             return
-        self.get_logger().info(f"い) Activation: {activation} -- side: {side}")
         new_status = (activation[-1] == 1.0) # the value is the last
 
-        self.get_logger().info(f"ろ) Activation status obj before update: {self.activation_status}")
         prev_status = self.activation_status[index]
         self.activation_status[index] = new_status
-
-        self.get_logger().info(f"は) New Activation status: {new_status}")
-        self.get_logger().info(f"に) Prev Activation status: {prev_status}")
-        self.get_logger().info(f"ほ) Activation status obj after update: {self.activation_status}")
 
         if prev_status != new_status:
             self.get_logger().info(f"Activation button pressed: {new_status}")
@@ -500,6 +495,14 @@ class AbstractController(ABC, Node):
             i += 1 + length  # move to the next limb code
 
         return data
+    
+    def append_sys_path_from_param(self, param_name):
+        self.declare_parameter("paths." + param_name, "")
+        path = self.get_parameter("paths." + param_name).get_parameter_value().string_value
+        if path and os.path.exists(path):
+            sys.path.append(path)
+        else:
+            self.get_logger().warn(f"Path from {param_name} not found or doesn't exist: {path}")
 
 
     # @abstractmethod
