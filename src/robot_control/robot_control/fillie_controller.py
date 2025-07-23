@@ -5,15 +5,13 @@ from rclpy.node import Node
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from robot_control.abstract_controller import AbstractController
 import robot_control.controller_tools as ct
-sys.path.append("/opt/openrobots/lib/python3.10/site-packages")
-from omniORB import CORBA
-sys.path.append("/opt/krc/lib")
-sys.path.append("/opt/krc/lib/NxApiLib/idl_NxApi")
-from NxApiLib import any as ANY
-from NxApi import *
+# sys.path.append("/opt/openrobots/lib/python3.10/site-packages")
+# from omniORB import CORBA
+# sys.path.append("/opt/krc/lib")
+# sys.path.append("/opt/krc/lib/NxApiLib/idl_NxApi")
+# from NxApiLib import any as ANY
+# from NxApi import *
 import numpy as np
-
-# TODO NOT FINISHED
 
 class FillieController(AbstractController):
     """
@@ -72,6 +70,11 @@ class FillieController(AbstractController):
         """
         super().__init__(robot_name="fillie")
 
+        self.append_sys_path_from_param("openrobot_path")
+        self.append_sys_path_from_param("krc_lib_path")
+        self.append_sys_path_from_param("nxapi_idl_path")
+        self.CORBA, self.ANY, self.NxApi = self.dynamic_imports()
+
         self.set_ros_parameters()
 
         self.is_moving = False
@@ -85,13 +88,13 @@ class FillieController(AbstractController):
         try:
             self.get_logger().info("Starting to connect to Fillie...")
             # Connect to the API server
-            orb = CORBA.ORB_init(argv, CORBA.ORB_ID)
+            orb = self.CORBA.ORB_init(argv, self.CORBA.ORB_ID)
             api = orb.string_to_object(f"corbaloc:iiop:1.2@{self.ip_robot}:2809/RootControllerApi")
-            root_controller = api._narrow(RootNxController)
+            root_controller = api._narrow(self.NxApi.RootNxController)
             # Raising an exception if the maximum number of clients is reached
             self.controller = root_controller.GetNxController("", "")
             # Acquire API Authority
-            self.controller.Execute("GetAuthority", ANY.to_any(None))
+            self.controller.Execute("GetAuthority", self.ANY.to_any(None))
             self.get_logger().info("Connected")
         except Exception as e:
             self.get_logger().error("Impossible to connect to the robot: " + str(e))
@@ -99,7 +102,7 @@ class FillieController(AbstractController):
 
         # Robot objects
         self.robot = self.controller.GetNxObject("Robot", "All")
-        self.robot.Execute("ServoOn", ANY.to_any(None))
+        self.robot.Execute("ServoOn", self.ANY.to_any(None))
         self.com_angle_var = self.robot.GetVariable("@JOINT_ANGLE", "")
         self.act_angle_var = self.robot.GetVariable("@ACTUAL_JOINT_ANGLE", "")
 
@@ -117,9 +120,9 @@ class FillieController(AbstractController):
 
         # Set production speed
         self.speed_var = self.controller.GetVariable("@SPEED", "")
-        self.speed_var.Execute("SetValues", ANY.to_any([[["value", int(self.robot_speed)]]]))
+        self.speed_var.Execute("SetValues", self.ANY.to_any([[["value", int(self.robot_speed)]]]))
 
-        self.param_wait_motion = ANY.to_any([["queueSize", self.robot_wait_queue_size]])
+        self.param_wait_motion = self.ANY.to_any([["queueSize", self.robot_wait_queue_size]])
 
         self._define_transformation_matrix()
         
@@ -129,9 +132,9 @@ class FillieController(AbstractController):
         #init hand
         if self.use_hand:
             self.hand_current_status = ct.LimbData(self.limb_config)
-            param_hand = ANY.to_any([["command", "ARH_Initialize"], ["arg", "1,COM29"]])
+            param_hand = self.ANY.to_any([["command", "ARH_Initialize"], ["arg", "1,COM29"]])
             self.controller.Execute("RunCommand", param_hand)
-            param_hand = ANY.to_any([["command", "ARH_Initialize"], ["arg", "2,COM30"]])
+            param_hand = self.ANY.to_any([["command", "ARH_Initialize"], ["arg", "2,COM30"]])
             self.controller.Execute("RunCommand", param_hand)
 
         self.activation_initial_pos = ct.LimbData(self.limb_config)
@@ -146,9 +149,15 @@ class FillieController(AbstractController):
             - Releases API authority from the robot controller.
         """
         if not self.simulation_only and hasattr(self, 'robot') and self.robot is not None:
-            self.robot.Execute("ServoOff", ANY.to_any(None))
+            self.robot.Execute("ServoOff", self.ANY.to_any(None))
             # Release API authority
-            self.controller.Execute("ReleaseAuthority", ANY.to_any(None))
+            self.controller.Execute("ReleaseAuthority", self.ANY.to_any(None))
+
+    def dynamic_imports():
+        from omniORB import CORBA
+        from NxApiLib import any as ANY
+        import NxApi as NxApi
+        return CORBA, ANY, NxApi
 
     def set_ros_parameters(self):
         """
@@ -164,7 +173,6 @@ class FillieController(AbstractController):
         """
         # Get the robot IP address from the parameter send by the launch file
         self.ip_robot = self.declare_and_get_ros_parameter('robot_ip', '192.168.128.55')
-        #self.ip_rmt = self.declare_and_get_ros_parameter('robot_ip', '192.168.128.55')
         self.robot_speed = self.declare_and_get_ros_parameter('robot_speed', 100.0)
         self.robot_wait_queue_size = self.declare_and_get_ros_parameter('robot_wait_queue_size', 2)
         self.mirrored = self.declare_and_get_ros_parameter('mirrored', False)
@@ -347,12 +355,12 @@ class FillieController(AbstractController):
             return
         
         for side in enabled_sides:
-            # if not self.activation_status[side]:
-            #     self.get_logger().info(f"{side} not activated - abort")
-            #     break
+            if not self.activation_status[side]:
+                self.get_logger().info(f"{side} not activated - abort")
+                break
             self.get_logger().debug(f"Current side: {side}")
-            position = ct.EndEffectorCoordinates(ANY.from_any(self.arm_pos_command_var[side].Execute("GetValues", ANY.to_any(None)))[0])
-            position_opposite = ct.EndEffectorCoordinates(ANY.from_any(self.arm_pos_command_var[self._opposite(side)].Execute("GetValues", ANY.to_any(None)))[0])
+            position = ct.EndEffectorCoordinates(self.ANY.from_any(self.arm_pos_command_var[side].Execute("GetValues", self.ANY.to_any(None)))[0])
+            position_opposite = ct.EndEffectorCoordinates(self.ANY.from_any(self.arm_pos_command_var[self._opposite(side)].Execute("GetValues", self.ANY.to_any(None)))[0])
             output_command = ct.EndEffectorCoordinates()
             a_list, b_list = zip(*self.LIMITS[side])
             limits_a = ct.EndEffectorCoordinates(list(a_list))
@@ -370,6 +378,7 @@ class FillieController(AbstractController):
             offset = 200 if side == ct.ArmLegSide.LEFT else -200
             output_command.y = min(output_command.y, position_opposite.y + offset) # avoid crossing 2 arms
 
+            # TODO: test the limits
             # for i in range(len(output_command.coordinates)):                
             #     if temp_copy[i] != output_command[i]:
             #         self.activation_initial_pos[side][i] = inputs[side][i]
@@ -426,33 +435,12 @@ class FillieController(AbstractController):
         # Update status and execute grip command
         self.hand_current_status[side] = new_status
 
-        param_hand = ANY.to_any([["command", "ARH_AutoGrip"], ["arg", f"{side},pos={int(new_status * 1000)}"]])
+        param_hand = self.ANY.to_any([["command", "ARH_AutoGrip"], ["arg", f"{side},pos={int(new_status * 1000)}"]])
         self.controller.Execute("RunCommand", param_hand)
 
-        param_hand = ANY.to_any([["command", "ARH_WaitBusy"], ["arg", f"{side}"]])
+        param_hand = self.ANY.to_any([["command", "ARH_WaitBusy"], ["arg", f"{side}"]])
         self.controller.Execute("RunCommand", param_hand)
         
-    # def controller_activated_callback(self, cmd) -> None:
-    #     """
-    #         Callback method for the activation of the controller (the movement shouldn't be taken into account if false).
-    #         This method is called when the robot receives new controller activation state. It should move or not the robot accordingly.
-
-    #         :param cmd: (Float32MultiArray) the controller activation state (0.0 or 1.0). 0.0 is not disabled, 1.0 is enabled. The table contain two values: the arm_id and the controller activation state.
-    #     """
-    #     activation = cmd.data
-    #     side = activation[ct.ArmLegData.ARM_LEG_ID]
-
-    #     if side in (ct.ArmLegSide.LEFT, ct.ArmLegSide.RIGHT):
-    #         index = side - 1
-    #         prev_status = self.activation_status[index]
-    #         new_status = (activation[ct.ArmLegData.DATA] == 1.0)
-    #         self.activation_status[index] = new_status
-
-    #         if prev_status != new_status:
-    #             self.get_logger().info(f"Activation button pressed: {new_status}")
-    #     else:
-    #         self.get_logger().warn(f"Activation status undefined ({activation})")
-
     def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):
         """
             Sends a movement command to the robot.
@@ -468,7 +456,7 @@ class FillieController(AbstractController):
                 Currently only supports End Effector position movements.
         """
         if position:
-            param = ANY.to_any([
+            param = self.ANY.to_any([
                 ["comp", 2],
                 ["csNo", 0],
                 ["csOffset", pos_or_joint_values],
@@ -477,7 +465,7 @@ class FillieController(AbstractController):
             self.get_logger().info(f"Speed: {self.robot_speed}")
             ret_any = self.arms[limb_side].Execute("Move", param)
             self.arms[limb_side].Execute("WaitMotion", self.param_wait_motion)
-            ret = ANY.from_any(ret_any)
+            ret = self.ANY.from_any(ret_any)
             self.get_logger().info(f"Command executed: {pos_or_joint_values}")
             self.get_logger().info(f"Ret: {ret[0]} ; drive time: {ret[1]} ; status: {ret[2]}")
         else:
@@ -496,7 +484,7 @@ class FillieController(AbstractController):
         """
             Publishes the current joint values to the communication interface.
         """
-        angles = ANY.from_any(self.com_angle_var.Execute("GetValues", ANY.to_any(None)))[0]
+        angles = self.ANY.from_any(self.com_angle_var.Execute("GetValues", self.ANY.to_any(None)))[0]
         self._communication_interface.publish("robot_joint_values", list(angles))
 
 def main(args=None):
