@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
 import array
 import copy
+import os
+import sys
 from rclpy.node import Node
+from rclpy.exceptions import ParameterAlreadyDeclaredException
 from typing import List
 from std_msgs.msg import String, Bool, Float32MultiArray
+from rclpy.parameter import Parameter, parameter_value_to_python
 from enum import Enum
 from communication_interface import * # Import all classes from the communication_interface package (no need to use the module name)
 import robot_control.controller_tools as ct
@@ -32,7 +36,8 @@ class AbstractController(ABC, Node):
     
     @property # Number of joints of the arm of robot
     def ARM_JOINTS_NUMBER(self) -> int:
-        return self.jav_home_pos.arm_joints_number
+        #return self.jav_home_pos.arm_joints_number
+        return self.limbs_architecture.first_value_of_type(ct.ArmLeg.ARM)
     
     @property
     def ARM_NUMBER(self) -> int:
@@ -40,11 +45,13 @@ class AbstractController(ABC, Node):
             Number of arms of the robot. 
             It can be 0, 1 (default) or 2.
         """
-        return self.jav_home_pos.arm_limb_number
+        #return self.jav_home_pos.arm_limb_number
+        return self.limbs_architecture.arm_count()
     
     @property # Number of joints of the leg of robot
     def LEG_JOINTS_NUMBER(self) -> int:
-        return self.jav_home_pos.leg_joints_number
+        #return self.jav_home_pos.leg_joints_number
+        return self.limbs_architecture.first_value_of_type(ct.ArmLeg.LEG)
     
     @property # Number of legs of the robot (-1, 0, 1 or 2)
     def LEG_NUMBER(self) -> int:
@@ -52,12 +59,29 @@ class AbstractController(ABC, Node):
             Number of legs of the robot. 
             It can be -1 (wheeled), 0 (static, default), 1 (left or right leg) or 2 (both legs).
         """
-        return self.jav_home_pos.leg_limb_number
+        #return self.jav_home_pos.leg_limb_number
+        return self.limbs_architecture.leg_count()
+
+    @property
+    def WHEEL_NUMBER(self) -> int:
+        """
+            Number of wheels of the robot.
+        """
+        return self.limbs_architecture.wheel_count()
+    
+    @property # Number of limbs of the robot
+    def LIMB_NUMBER(self) -> int:
+        """
+            Number of limbs (arm+leg) of the robot. 
+            In case of wheel, it will be counted as one limb.
+        """
+        #return self.ARM_NUMBER + (self.LEG_NUMBER if self.LEG_NUMBER != -1 else 1)
+        return self.limbs_architecture.limb_count()
     
     @property # Communication interface used by the robot controller, defined by launch argument (return the name of the interface)
     def COMMUNICATION_INTERFACE(self) -> str:
-        return self._communication_interface.INTERFACE_NAME
-    
+        return self._communication_interface.INTERFACE_NAME    
+   
     # ATTRIBUTES -------------------------------------------------------------    
     jav_init_pos = ct.JointAnglesValues()
     jav_home_pos = ct.JointAnglesValues()
@@ -83,15 +107,18 @@ class AbstractController(ABC, Node):
         super().__init__(node_name=self.ROBOT_NAME+'_controller')
         self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER =========")
 
-        self.declare_parameter('communication_interface', "ros")
-        communication_interface = self.get_parameter('communication_interface').get_parameter_value().string_value
+        communication_interface = self.declare_and_get_ros_parameter('communication_interface', "ros")
         CommunicationInterfaceClass = globals()[communication_interface.capitalize()+'Interface']
         self._communication_interface = CommunicationInterfaceClass(self)
 
-        self.declare_parameter('simulation_only', False)
-        self.simulation_only = self.get_parameter('simulation_only').get_parameter_value().bool_value
-        self.get_logger().info(f"Simulation only: {self.simulation_only}")
+        self.simulation_only = self.declare_and_get_ros_parameter('simulation_only', False, log=True)
+
+        self.activation_status              = ct.LimbData("empty", default_value=False, force_same_value_type=True)
+        self.activation_status_has_changed  = ct.LimbData("empty", default_value=False, force_same_value_type=True)
+        self.limbs_architecture             = ct.LimbData("empty", default_value=0, force_same_value_type=True)
+        #self.limbs_joint_value             = ct.LimbData("empty")
         
+        self.setting_robot_limbs_from_parameters()
         self.setting_home_position_from_parameter()
 
         self.create_subscribers()
@@ -103,7 +130,7 @@ class AbstractController(ABC, Node):
             It sets the initialised attribute to True, to indicate that the controller is initialised.
             It also logs a message to indicate that the controller is initialised.
         """
-        self.get_logger().info("========= "+self.ROBOT_NAME+" CONTROLLER INIT DONE =========")
+        self.get_logger().info("========= " + self.ROBOT_NAME + " CONTROLLER INIT DONE =========")
         self.initialised = True
 
     def setting_home_position_from_parameter(self):
@@ -132,31 +159,101 @@ class AbstractController(ABC, Node):
 
         """
         for arm_leg in {ct.ArmLeg.ARM, ct.ArmLeg.LEG}:
-            self.declare_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ct.ArmLeg.ARM else 0))
-            limb_number = self.get_parameter(f'robot_{arm_leg.name.lower()}_number').get_parameter_value().integer_value
+            limb_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ct.ArmLeg.ARM else 0))
             self.jav_home_pos.set_limb_number(arm_leg, limb_number)
             self.jav_init_pos.set_limb_number(arm_leg, limb_number)
             self.jav_current_pos.set_limb_number(arm_leg, limb_number)
 
-            self.declare_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
-            joint_number = self.get_parameter(f'robot_{arm_leg.name.lower()}_joints_number').get_parameter_value().integer_value
+            joint_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
             self.jav_home_pos.set_joints_number(arm_leg, joint_number)
             self.jav_init_pos.set_joints_number(arm_leg, joint_number)
             self.jav_current_pos.set_joints_number(arm_leg, joint_number)
 
-            self.declare_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
-            temp_home_pos = self.get_parameter(f'{arm_leg.name.lower()}_robot_home_position').get_parameter_value().double_array_value
-            if temp_home_pos != [0.0]:
-                self.jav_home_pos.set_limb_articulations_value(arm_leg=arm_leg, value=temp_home_pos)
+            temp_home_pos = self.declare_and_get_ros_parameter(f'{arm_leg.name.lower()}_robot_home_position', [0.0])
+            #if temp_home_pos != [0.0]:
+            #    self.jav_home_pos.set_limb_articulations_value(arm_leg=arm_leg, value=temp_home_pos)
+
+    def setting_robot_limbs_from_parameters(self):
+        """
+            Reads and configures the robot's limb and joint settings from ROS parameters.
+
+            For each limb type (arm, leg, wheel, etc.), this method:
+            - Retrieves the number of limbs and the number of joints per limb from ROS parameters.
+            - Builds the limb configuration accordingly, supporting up to 4 limbs per type.
+            - Updates the activation status (`self.activation_status`) with the new configuration.
+            - Updates the limb architecture (`self.limbs_architecture`) with the number of joints.
+            - Stores the overall limb configuration in `self.limb_config`.
+
+            Raises:
+                ValueError: If the number of limbs for a limb type is outside the allowed range [0;4].
+        """
+        for arm_leg in ct.ArmLeg:
+            limb_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_number', 0)
+            joint_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_joints_number', 0)
+
+            if limb_number == 0:
+                continue
+
+            if limb_number == 1:
+                config = [(arm_leg, ct.ArmLegSide.NONE)]
+            elif limb_number == 2:
+                config = [(arm_leg, ct.ArmLegSide.LEFT), (arm_leg, ct.ArmLegSide.RIGHT)]
+            elif limb_number == 3:
+                config = [(arm_leg, ct.ArmLegSide.LEFT), (arm_leg, ct.ArmLegSide.RIGHT), (arm_leg, ct.ArmLegSide.MIDDLE)]
+            elif limb_number == 4:
+                config = [
+                    (arm_leg, ct.ArmLegSide.LEFT),
+                    (arm_leg, ct.ArmLegSide.RIGHT),
+                    (arm_leg, ct.ArmLegSide.LEFT2),
+                    (arm_leg, ct.ArmLegSide.RIGHT2)
+                ]
+            else:
+                raise ValueError(f"The number of {arm_leg.name.lower()} should be in [0;4]")
+
+            self.activation_status.add_limbs(config, True) # CHANGED TO TRUE
+            self.limbs_architecture.add_limbs(config,joint_number)
+        self.limb_config = self.activation_status.config
+        self.activation_status_has_changed = self.activation_status
+        self.activation_status_has_changed[ct.ArmLegSide.LEFT] = False # ADDED
+        self.activation_status_has_changed[ct.ArmLegSide.RIGHT] = False # ADDED
 
     # ROS Initialisation methods
     @abstractmethod
-    def declare_ros_parameters(self) -> None:
+    def set_ros_parameters(self) -> None:
         """
-            Declare the ROS parameters needed by the robot controller, and that are specific.
+            Set the ROS parameters needed by the robot controller, and that are specific.
             It should be overriden by the child classes.
         """
         pass
+
+    def declare_and_get_ros_parameter(self, parameter_name: str, default_value=None, parameter_descriptor=None, log=False):
+        """
+            Declares a ROS parameter and retrieves its value in Python-native format.
+
+            This function declares a parameter with the given name and default value,
+            retrieves its value from the ROS parameter server, converts it to a native
+            Python type, and optionally logs the parameter's name and value.
+
+            Args:
+                parameter_name (str): The name of the parameter to declare and retrieve.
+                default_value (Any, optional): The default value to assign if the parameter is not set. Defaults to None.
+                parameter_descriptor (rcl_interfaces.msg.ParameterDescriptor, optional): Descriptor providing metadata about the parameter. Defaults to None.
+                log (bool, optional): If True, logs the parameter name and value. Defaults to False.
+
+            Returns:
+                Any: The value of the parameter converted to its corresponding Python type.
+        """
+        try:
+            self.declare_parameter(parameter_name, default_value, descriptor=parameter_descriptor)
+        except ParameterAlreadyDeclaredException:
+            pass
+        except Exception as e:
+            self.get_logger().error(f"Error while getting parameter {parameter_name} with default value {default_value}: {e}")
+        val = self.get_parameter(parameter_name).get_parameter_value()
+        val = parameter_value_to_python(val)
+        if log: self.get_logger().info(f"{parameter_name}: {val}")
+
+        return val
 
     def create_subscribers(self) -> None:
         """
@@ -231,15 +328,37 @@ class AbstractController(ABC, Node):
         """
         pass
 
-    @abstractmethod
+    #@abstractmethod
     def controller_activated_callback(self, cmd) -> None:
         """
-            Callback method for the activation of the controller (the movement shouldn't be taken into account if false). It should be overriden by the child classes.
+            Callback method for the activation of the controller (the movement shouldn't be taken into account if false).
             This method is called when the robot receives new controller activation state. It should move or not the robot accordingly.
 
-            :param cmd: (Float32MultiArray) the controller activation state (0.0 or 1.0). 0.0 is not disabled, 1.0 is enabled. The table contain two values: the arm_id and the controller activation state.
+            The input value is eithr an array of two element ([side ; state]), assuming the limb if the robot has only one type, or an array of three elements ([limb ; side ; state])
+
+            :param cmd: (Float32MultiArray) the controller activation state (0.0 or 1.0). 0.0 is not disabled, 1.0 is enabled.
         """
-        pass
+        activation = cmd
+        if len(activation)==2: # only one kind of limb
+            side = ct.ArmLegSide(int(activation[0]))
+            index = side
+        elif len(activation==3):
+            limb = ct.ArmLeg(int(activation[0]))
+            side = ct.ArmLegSide(int(activation[1]))
+            index = (limb, side)
+        else:
+            self.get_logger().error(f"Activation data in wrong format, it should be an array of two or three values. Received: {new_status}. Operation aborted")
+            return
+        new_status = (activation[-1] == 1.0) # the value is the last
+
+        prev_status = self.activation_status[index]
+        self.activation_status[index] = new_status
+
+        if prev_status != new_status:
+            self.get_logger().info(f"Activation button pressed: {new_status}")
+            self.activation_status_has_changed[index] = True
+        else:
+            self.activation_status_has_changed[index] = False
 
     @abstractmethod
     def emergency_stop_callback(self, msg) -> None:
@@ -270,7 +389,7 @@ class AbstractController(ABC, Node):
         
             :param msg: (Int) the current time of the operator as a POSIX timestamp (in millisecond).
         """
-        operator_time = msg.data
+        operator_time = msg
         robot_time = round(time.time_ns() / 10**6)
         time_diff = robot_time - operator_time
         self.get_logger().info(f"Delay: {time_diff} ms")
@@ -331,6 +450,60 @@ class AbstractController(ABC, Node):
             This function is used to transform the end effector position and rotation from the robot coordinate system to the Unity coordinate system.
         """
         pass
+
+    def extract_joint_angle_command(self, cmd):
+        """
+            Extracts and organizes joint angle commands for each limb from the received data (array of float in cmd.data).
+
+            The method supports two scenarios:
+            1) If there is only one limb in the architecture, the data is assumed to contain only joint values (no limb code).
+            2) Otherwise, the data format is [LIMB_CODE, DATA_1, DATA_2, ..., LIMB_CODE, DATA_1, ...] for each limb.
+            Each limb's data is identified by a 2-digit limb code (ArmLeg*10 + ArmLegSide).
+
+            Args:
+                cmd (any): An object containing a 'data' attribute with a list of float values.
+                    This list encodes the joint commands for all limbs.
+
+            Returns:
+                LimbData: A LimbData instance containing the joint angle commands for each limb.
+
+            Raises:
+                ValueError: If the data format is inconsistent with the robot's current architecture
+                            or if a limb code cannot be parsed.
+        """
+        if len(self.limbs_architecture) ==1 and len(cmd.data) == next(iter(self.limbs_architecture.values())): # in case of only one limb, no need for code
+            return ct.LimbData(self.limb_config, cmd.data, True)
+        
+        data_len = sum((v+1) for (_, _), v in self.limbs_architecture.items()) # +1 because of the limb code
+        cmd = cmd.data
+
+        if len(cmd) != data_len:
+            raise ValueError("The received command is not consistant with the current robot architecture.")
+        
+        data = ct.LimbData(self.limb_config, [0.0], True) # Create the empty data structure
+        i = 0
+        while i < len(cmd):
+            code = f"{int(cmd[i]):02d}"
+            try:
+                limb = ct.ArmLeg(int(code[:1]))
+                side = ct.ArmLegSide(int(code[1:]))
+            except ValueError:
+                raise ValueError(f"Joint angle code format wrong ({code})")
+
+            length = self.limbs_architecture[(limb, side)]
+            data[(limb, side)] = cmd[i+1:i+1+length]
+            i += 1 + length  # move to the next limb code
+
+        return data
+    
+    def append_sys_path_from_param(self, param_name):
+        self.declare_parameter("paths." + param_name, "")
+        path = self.get_parameter("paths." + param_name).get_parameter_value().string_value
+        if path and os.path.exists(path):
+            sys.path.append(path)
+        else:
+            self.get_logger().warn(f"Path from {param_name} not found or doesn't exist: {path}")
+
 
     # @abstractmethod
     # def set_home_position_from_end_effector_position(self, ee_position) -> None:
