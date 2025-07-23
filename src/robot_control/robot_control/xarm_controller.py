@@ -19,7 +19,6 @@ class XarmController(AbstractController):
         It receives the joint values from the Operator PC and moves the robot to the new joint values.
         The values are received as a list of 6 float values, representing the joint angles in degree.
     """
-    print(">>> ______________XARM EN ATTENTE__________")
     def __init__(self):
         super().__init__(robot_name="xarm")
 
@@ -100,20 +99,8 @@ class XarmController(AbstractController):
         """
         # Get the robot IP address from the parameter send by the launch file
         self.ip = self.declare_and_get_ros_parameter('robot_ip', '192.168.1.217')
-        self.declare_parameter('effector_offset', 0)
-        self.effector_offset = self.get_parameter('effector_offset').get_parameter_value().integer_value
-
-    def create_subscribers(self):
-        super().create_subscribers()
-        self._communication_interface.define_subscribers({
-            '/ARC/end_effector_position': (self.end_effector_position_callback, Float32MultiArray)
-        })
-        
-
-    def controller_activated_callback(self, msg):
-        #Just here to define the callback, it is not used in this controller
-	    self.get_logger().info(f"Controller activated callback triggered with: {msg}")
-
+        self.effector_offset = self.declare_and_get_ros_parameter('effector_offset', 0)
+    
     def emergency_stop_callback(self, msg):
         """
             This function is called when an emergency stop is requested.
@@ -182,8 +169,7 @@ class XarmController(AbstractController):
         self.ee_cmd = cmd  # Use the modified command
         self.get_logger().info(f"End-effector command received: {self.ee_cmd}")
 
-    def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):
-        self.get_logger().info(f"Moving joint of robot to: {pos_or_joint_values}")
+    def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):        
         """
             Move the robot to the given joint values or end effector position.
             The joint values are received as a list of 6 float values, representing the joint angles in degree.
@@ -196,7 +182,9 @@ class XarmController(AbstractController):
             :param wait: (Bool) if True, the function waits until the robot reaches the desired position.
 
             TODO: The speed and acceleration values are to be changed.
-        """
+            TODO: use controller activation data
+        """     
+
         if not self.initialised:
             return
         if self.simulation_only:
@@ -204,6 +192,7 @@ class XarmController(AbstractController):
             return
         
         if position: # end effector position
+            self.get_logger().info(f"Moving end effector to: {pos_or_joint_values}")
             if pos_or_joint_values is None and self.ee_cmd is not None:
 
                 target = np.array(self.ee_cmd, dtype=float)
