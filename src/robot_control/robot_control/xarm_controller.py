@@ -41,6 +41,10 @@ class XarmController(AbstractController):
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
         self.inv_transformation_matrix = np.linalg.inv(self.transformation_matrix) # Inverse transformation matrix from Unity to robot coordinate system
 
+        self.lastPublishTime = time.time()
+        self.publishFrequency = 50         # Hz
+        self.compteur = 0
+
         if not self.simulation_only:
             try:
                 self.arm = XArmAPI(self.ip, is_radian=False)
@@ -75,7 +79,6 @@ class XarmController(AbstractController):
             # self._communication_interface.modify_qos_for_topic('end_effector_position', qos_profile)
 
             # Timers for streaming commands and preventing lock
-            self.create_timer(0.005, lambda: self.move_robot(None, True)) # TODO cst in config?
             self.create_timer(1, self._anti_lock_timer_callback)
 
         else:
@@ -85,7 +88,8 @@ class XarmController(AbstractController):
 
         self.get_logger().info(f"init_pos: {self.jav_init_pos}")
         self.get_logger().info(f"home_pos: {self.jav_home_pos}")
-
+        self.arm.set_gripper_position(840, speed=2000, wait=False)      #Init Hand open
+                    
         self._init_done()
 
     def __del__(self):
@@ -165,10 +169,57 @@ class XarmController(AbstractController):
         """
         if not self.initialised:
             return
-
+        pos_or_joint_values=None
+        
+        cmd[0] = -3101 * cmd[0] + 393
+        cmd[1] = 3412 * cmd[1]
+        cmd[2] = 3610 * cmd[2] - 4000 
+        cmd[3] = 0
+        cmd[4] = -90 + cmd[4] 
+        cmd[5] = -180 - cmd[5]
+        
         self.ee_cmd = cmd  # Use the modified command
-        self.get_logger().info(f"End-effector command received: {self.ee_cmd}")
+        if pos_or_joint_values is None and self.ee_cmd is not None:
 
+            target = np.array(self.ee_cmd, dtype=float)
+            _, pose = self.arm.get_position(is_radian=False)
+            current = np.array(pose, dtype=float)
+
+            # Position interpolation:
+            delta_pose = target[:3] - current[:3]
+            distance = np.linalg.norm(delta_pose)
+            if distance < 1:
+                cmd_xyz = current[:3]
+            else:
+                step_size = min(5.0, distance)
+                cmd_xyz = current[:3] + (delta_pose / distance)
+
+            # Interpolation de l'orientation aussi
+            delta_orientation = target[3:] - current[3:]
+            orientation_distance = np.linalg.norm(delta_orientation)
+
+            if orientation_distance < 1.0:  # 1 degré
+                cmd_orientation = target[3:]
+            else:
+                # Pas d'interpolation pour l'orientation (2 degrés par cycle)
+                step_size_orientation = min(2.0, orientation_distance)
+                cmd_orientation = current[3:] + (delta_orientation / orientation_distance) * step_size_orientation
+
+            command = np.concatenate((cmd_xyz, target[3:]))
+
+         
+        elif self.ee_cmd is None:
+            return
+        else:
+            command = pos_or_joint_values
+        pos_or_joint_values=command
+        
+        if ((time.time() - 1/self.publishFrequency) >= self.lastPublishTime) :
+            self.lastPublishTime = time.time()
+            self.compteur += 1
+            self.get_logger().info(f"nombre de publication : {self.compteur}")
+        self.move_robot(pos_or_joint_values=pos_or_joint_values,position=True)
+            
     def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):        
         """
             Move the robot to the given joint values or end effector position.
@@ -190,49 +241,15 @@ class XarmController(AbstractController):
         if self.simulation_only:
             self.simulation(pos_or_joint_values, position, arm_leg, limb_side, wait)
             return
-        
-        if position: # end effector position
-            self.get_logger().info(f"Moving end effector to: {pos_or_joint_values}")
-            if pos_or_joint_values is None and self.ee_cmd is not None:
 
-                target = np.array(self.ee_cmd, dtype=float)
-                _, pose = self.arm.get_position(is_radian=False)
-                current = np.array(pose, dtype=float)
-
-                # Position interpolation:
-                delta_pose = target[:3] - current[:3]
-                distance = np.linalg.norm(delta_pose)
-                if distance < 1:
-                    cmd_xyz = current[:3]
-                else:
-                    step_size = min(5.0, distance)
-                    cmd_xyz = current[:3] + (delta_pose / distance)
-
-                # Interpolation de l'orientation aussi
-                delta_orientation = target[3:] - current[3:]
-                orientation_distance = np.linalg.norm(delta_orientation)
-
-                if orientation_distance < 1.0:  # 1 degré
-                    cmd_orientation = target[3:]
-                else:
-                    # Pas d'interpolation pour l'orientation (2 degrés par cycle)
-                    step_size_orientation = min(2.0, orientation_distance)
-                    cmd_orientation = current[3:] + (delta_orientation / orientation_distance) * step_size_orientation
-
-                command = np.concatenate((cmd_xyz, target[3:]))
-                self.get_logger().info(f"target: {target}")
-                self.get_logger().info(f"position: {pose}")
-                self.ee_cmd = None
-            elif self.ee_cmd is None:
-                return
-            else:
-                command = pos_or_joint_values
-
+        if position: # end effector position    
             self.arm.set_servo_cartesian(
-                command,
+                pos_or_joint_values,
                 speed=self.TRANS_SPEED,
                 mvacc=50.0,
-            )            
+            )   
+        
+        """             
         else: # joint values
             self.get_logger().info(f"Moving joint of robot to: {pos_or_joint_values}")
             try:
@@ -247,7 +264,7 @@ class XarmController(AbstractController):
                 self.get_logger().error("Impossible to move the robot: " + e)
 
             self._communication_interface.publish("robot_joint_values", pos_or_joint_values)
-
+        """
         self.jav_current_pos[ct.ArmLeg.ARM] = self.arm.get_servo_angle(is_radian=False)[1][:self.ARM_JOINTS_NUMBER]
         self._communication_interface.publish("robot_joint_values", self._transform_robot_to_unity(self.jav_current_pos.value).tolist())
 
@@ -263,26 +280,21 @@ class XarmController(AbstractController):
         self.get_logger().info(f"EE Init position: {self.eec_current_pos}")
 
     def hand_open_close_callback(self, msg):
-        arm_id = int(msg.data[0])
-        gripper_state = float(msg.data[1])
-        self.get_logger().info(f"Arm ID: {arm_id}, Gripper state: {gripper_state}")
-
-        if not self.simulation_only:
-            if arm_id == int(ct.ArmLegSide.LEFT):
-                self.arm.set_gripper_position() # TODO: implement the gripper position ; def set_gripper_position(self, pos, wait=False, speed=None, auto_enable=False, timeout=None, **kwargs):
-            else:
-                self.get_logger().error(f"Unknown arm ID: {arm_id}")
-
-    def gripper_callback(self, msg):
-        pos_mm = np.clip(msg.position, -10.0, 850.0)  # -10 to 85 mm for xArm gripper
-        speed = np.clip(msg.max_effort, 350.0, 5000.0)
-
-        #self.arm.set_gripper_position(pos_mm, speed=speed, wait=False)
+        # arm_id = int(msg[0])
+        # gripper_state = float(msg[1])
         
-        # self.get_logger().info(
-        #     f"Gripper command received: {(pos_mm/10.):.2f} mm, "
-        #     f"speed: {speed:.2f} r/min"
-        # )
+        
+        speed = 2000
+        command = msg[1] * 850 - 10   #Turn per thousand into mm
+        self.get_logger().info(f"Gripper state: {command}")
+        
+        self.arm.set_gripper_position(command, speed=speed, wait=False)
+        
+        # if not self.simulation_only:
+        #     if arm_id == 0:
+        #         self.arm.set_gripper_position(command, speed=speed, wait=False)
+        #     else:
+        #         self.get_logger().error(f"Unknown arm ID: {arm_id}")
 
     def _anti_lock_timer_callback(self) -> None:
         """

@@ -210,12 +210,12 @@ class AbstractController(ABC, Node):
             else:
                 raise ValueError(f"The number of {arm_leg.name.lower()} should be in [0;4]")
 
-            self.activation_status.add_limbs(config, True) # CHANGED TO TRUE
+            self.activation_status.add_limbs(config, False) # CHANGED TO TRUE
             self.limbs_architecture.add_limbs(config,joint_number)
         self.limb_config = self.activation_status.config
         self.activation_status_has_changed = self.activation_status
-        self.activation_status_has_changed[ct.ArmLegSide.LEFT] = False # ADDED
-        self.activation_status_has_changed[ct.ArmLegSide.RIGHT] = False # ADDED
+        #self.activation_status_has_changed[ct.ArmLegSide.LEFT] = False # ADDED
+        #self.activation_status_has_changed[ct.ArmLegSide.RIGHT] = False # ADDED
 
     # ROS Initialisation methods
     @abstractmethod
