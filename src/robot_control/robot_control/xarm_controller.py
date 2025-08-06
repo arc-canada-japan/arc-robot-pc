@@ -8,7 +8,7 @@ from control_msgs.msg import GripperCommand
 import robot_control.controller_tools as ct
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Float32MultiArray
-
+import copy
 from xarm.wrapper import XArmAPI
 
 import time
@@ -40,10 +40,6 @@ class XarmController(AbstractController):
 
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
         self.inv_transformation_matrix = np.linalg.inv(self.transformation_matrix) # Inverse transformation matrix from Unity to robot coordinate system
-
-        self.lastPublishTime = time.time()
-        self.publishFrequency = 50         # Hz
-        self.compteur = 0
 
         if not self.simulation_only:
             try:
@@ -78,7 +74,7 @@ class XarmController(AbstractController):
             )
             # self._communication_interface.modify_qos_for_topic('end_effector_position', qos_profile)
 
-            # Timers for streaming commands and preventing lock
+            # Timers for preventing lock
             self.create_timer(1, self._anti_lock_timer_callback)
 
         else:
@@ -165,60 +161,76 @@ class XarmController(AbstractController):
     def end_effector_position_callback(self, cmd):
         """
             This function is called when a new end effector position is received from the Operator PC.
+            It remap the data gave as input for the Xarm's workspace and add to it an offset du to hand or gripper if necessary
             It calls the move_robot function.
         """
         if not self.initialised:
             return
         pos_or_joint_values=None
-        
-        cmd[0] = -3101 * cmd[0] + 393
+
+        # Linear regression from Touch input to Xarm working space
+        cmd[0] = -3101 * cmd[0] + 493
         cmd[1] = 3412 * cmd[1]
         cmd[2] = 3610 * cmd[2] - 4000 
         cmd[3] = 0
         cmd[4] = -90 + cmd[4] 
         cmd[5] = -180 - cmd[5]
-        
-        self.ee_cmd = cmd  # Use the modified command
-        if pos_or_joint_values is None and self.ee_cmd is not None:
 
-            target = np.array(self.ee_cmd, dtype=float)
+        #Add of the offset
+        # Extract orientation angles (degrees)
+        roll = math.radians(cmd[3])   # X Rotation
+        pitch = math.radians(cmd[4])  # Y Rotation
+        yaw = math.radians(cmd[5])    # Z Rotation
+
+        # Calcul of the directionnal vector of the gripper
+        direction_x = math.sin(pitch) * math.cos(yaw)
+        direction_y = math.sin(pitch) * math.sin(yaw)
+        direction_z = math.cos(pitch)
+
+        # Multiply by the offset lenght
+        offset_x = direction_x * self.effector_offset
+        offset_y = direction_y * self.effector_offset
+        offset_z = direction_z * self.effector_offset
+
+        # Retray the offset for the command
+        cmd[0] = cmd[0] - offset_x
+        cmd[1] = cmd[1] - offset_y
+        cmd[2] = cmd[2] - offset_z
+        
+        # Target a position close to the robot in the direction of the initital target 
+        if pos_or_joint_values is None and cmd is not None:
+
+            target = np.array(cmd, dtype=float)
             _, pose = self.arm.get_position(is_radian=False)
             current = np.array(pose, dtype=float)
 
-            # Position interpolation:
+            # Interpolation posiiton
             delta_pose = target[:3] - current[:3]
             distance = np.linalg.norm(delta_pose)
             if distance < 1:
                 cmd_xyz = current[:3]
             else:
                 step_size = min(5.0, distance)
-                cmd_xyz = current[:3] + (delta_pose / distance)
+                cmd_xyz = current[:3] + (delta_pose / distance) * 2
 
-            # Interpolation de l'orientation aussi
+            # Interpolation Orientation
             delta_orientation = target[3:] - current[3:]
             orientation_distance = np.linalg.norm(delta_orientation)
 
-            if orientation_distance < 1.0:  # 1 degré
+            if orientation_distance < 1.0:  # 1 degree
                 cmd_orientation = target[3:]
-            else:
-                # Pas d'interpolation pour l'orientation (2 degrés par cycle)
+            else:                           # Non interpolation for orientation
                 step_size_orientation = min(2.0, orientation_distance)
                 cmd_orientation = current[3:] + (delta_orientation / orientation_distance) * step_size_orientation
 
-            command = np.concatenate((cmd_xyz, target[3:]))
-
+            command = np.concatenate((cmd_xyz, target[3:]))    
          
-        elif self.ee_cmd is None:
+        elif cmd is None:
             return
         else:
             command = pos_or_joint_values
-        pos_or_joint_values=command
-        
-        if ((time.time() - 1/self.publishFrequency) >= self.lastPublishTime) :
-            self.lastPublishTime = time.time()
-            self.compteur += 1
-            self.get_logger().info(f"nombre de publication : {self.compteur}")
-        self.move_robot(pos_or_joint_values=pos_or_joint_values,position=True)
+    
+        self.move_robot(pos_or_joint_values=command,position=True)
             
     def move_robot(self, pos_or_joint_values, position=False, arm_leg=ct.ArmLeg.ARM, limb_side=ct.ArmLegSide.LEFT, wait=False):        
         """
@@ -280,21 +292,18 @@ class XarmController(AbstractController):
         self.get_logger().info(f"EE Init position: {self.eec_current_pos}")
 
     def hand_open_close_callback(self, msg):
-        # arm_id = int(msg[0])
-        # gripper_state = float(msg[1])
-        
-        
+        """
+            Use Xarm's API to open and close the gripper when asked
+        """   
+        arm_id = int(msg[0])        
         speed = 2000
-        command = msg[1] * 850 - 10   #Turn per thousand into mm
-        self.get_logger().info(f"Gripper state: {command}")
+        command = msg[-1] * 850 - 10   #Turn per thousand into mm
         
-        self.arm.set_gripper_position(command, speed=speed, wait=False)
-        
-        # if not self.simulation_only:
-        #     if arm_id == 0:
-        #         self.arm.set_gripper_position(command, speed=speed, wait=False)
-        #     else:
-        #         self.get_logger().error(f"Unknown arm ID: {arm_id}")
+        if not self.simulation_only:
+            if arm_id == 0:
+                self.arm.set_gripper_position(command, speed=speed, wait=False)
+            else:
+                self.get_logger().error(f"Unknown arm ID: {arm_id}")
 
     def _anti_lock_timer_callback(self) -> None:
         """
