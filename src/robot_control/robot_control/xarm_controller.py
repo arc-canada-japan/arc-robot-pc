@@ -53,7 +53,7 @@ class XarmController(AbstractController):
             self.initialised = True
 
             self.set_init_position_to_current()
-            self.move_robot(self.jav_home_pos.value, wait=True) 
+            # self.move_robot(self.jav_home_pos.value, wait=True) 
 
             self.initialised = False
 
