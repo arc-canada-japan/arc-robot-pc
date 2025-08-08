@@ -21,7 +21,7 @@ class KinovaController(AbstractController):
     def __init__(self):
         super().__init__(robot_name="kinova")
 
-        self.declare_ros_parameters()
+        self.set_ros_parameters()
         self.define_services()
 
         self.transformation_matrix = np.array([[0, 0, -1], [1, 0, 0], [0, 1, 0]]) # Transformation matrix from Unity to robot coordinate system
@@ -35,9 +35,9 @@ class KinovaController(AbstractController):
         if not self.simulation_only:
             pass
 
-    def declare_ros_parameters(self):
+    def set_ros_parameters(self):
         """
-            Declare the ROS parameters used by the controller.
+            Set the ROS parameters used by the controller.
         """
         pass
 
@@ -158,25 +158,6 @@ class KinovaController(AbstractController):
         pose_array_msg.header.stamp = self.get_clock().now().to_msg()
         pose_array_msg.header.frame_id = "world"
 
-        # head_pos_msg = Pose()
-        # head_pos_msg.position.x = head_cmd[0]
-        # head_pos_msg.position.y = head_cmd[1]
-        # head_pos_msg.position.z = head_cmd[2]
-        # head_pos_msg.orientation.x = head_cmd[3]
-        # head_pos_msg.orientation.y = head_cmd[4]
-        # head_pos_msg.orientation.z = head_cmd[5]
-        # head_pos_msg.orientation.w = head_cmd[6]
-
-        # hand_pos_msg = Pose()
-        # hand_pos_msg.position.x = controller_cmd[0]
-        # hand_pos_msg.position.y = controller_cmd[1]
-        # hand_pos_msg.position.z = controller_cmd[2]
-        # hand_pos_msg.orientation.x = controller_cmd[3]
-        # hand_pos_msg.orientation.y = controller_cmd[4]
-        # hand_pos_msg.orientation.z = controller_cmd[5]
-        # hand_pos_msg.orientation.w = controller_cmd[6]
-
-        # pose_array_msg.poses = [head_pos_msg, hand_pos_msg]
         pose_array_msg.poses = [eec_head.to_pose_msg(), eec_controller.to_pose_msg()]
 
         self.move_robot(pose_array_msg, position=True)
@@ -208,11 +189,6 @@ class KinovaController(AbstractController):
     def set_init_position_to_current(self):
         self.get_logger().warning("set_init_position_to_current not implemented for Kinova robot")
         return
-        temp = self.arm.get_servo_angle(is_radian=False)[1][:self.ARM_JOINTS_NUMBER]
-        self.jav_init_pos[ct.ArmLeg.ARM] = temp
-
-        self.eec_current_pos = ct.EndEffectorCoordinates(self.arm.get_position(is_radian=False)[1][:6] if self.arm.get_position()[0] == 0 else [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # if the get_position() returns an error (not 0 for code), the position is set to [0, 0, 0]
-        self.get_logger().info(f"EE Init position: {self.eec_current_pos}")
 
     def hand_open_close_callback(self, msg):
         arm_id = int(msg[0])

@@ -23,6 +23,9 @@ class ArmLegSide(Enum):
     NONE = 0
     LEFT = 1
     RIGHT = 2
+    MIDDLE = 3
+    LEFT2 = 4
+    RIGHT2 = 5
 
 class ArticulationDesc:
     """
@@ -512,18 +515,71 @@ class EndEffectorCoordinates:
         pose.position.x, pose.position.y, pose.position.z = self._position
         pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = self._orientation if len(self._orientation) == 4 else self.euler_to_quaternion()
         return pose
+    
+    def min_elements(self, other: 'EndEffectorCoordinates') -> 'EndEffectorCoordinates':
+        """
+            Returns a new EndEffectorCoordinates object whose coordinates are the element-wise minimum 
+            between this object and another.
+
+            Args:
+                other (EndEffectorCoordinates): Another instance to compare with.
+
+            Returns:
+                EndEffectorCoordinates: A new instance with element-wise minimum coordinates.
+
+            Raises:
+                ValueError: If the orientation lengths between the two objects do not match, indicating
+                            inconsistent orientation types (e.g., Euler vs Quaternion).
+        """
+        if len(self.orientation) != len(other.orientation):
+            raise ValueError("Orientations are not consistent (Euler/Quaternion) between both objects")
+        ans = EndEffectorCoordinates()
+        for i in range(len(self.coordinates)):
+            ans.coordinates[i] = min(self.coordinates[i], other.coordinates[i])
+
+        return ans
+    
+    def max_elements(self, other: 'EndEffectorCoordinates') -> 'EndEffectorCoordinates':
+        """
+            Returns a new EndEffectorCoordinates object whose coordinates are the element-wise maximum 
+            between this object and another.
+
+            Args:
+                other (EndEffectorCoordinates): Another instance to compare with.
+
+            Returns:
+                EndEffectorCoordinates: A new instance with element-wise maximum coordinates.
+
+            Raises:
+                ValueError: If the orientation lengths between the two objects do not match, indicating
+                            inconsistent orientation types (e.g., Euler vs Quaternion).
+        """
+        if len(self.orientation) != len(other.orientation):
+            raise ValueError("Orientations are not consistent (Euler/Quaternion) between both objects")
+        ans = EndEffectorCoordinates()
+        for i in range(len(self.coordinates)):
+            ans.coordinates[i] = max(self.coordinates[i], other.coordinates[i])
+
+        return ans
+    
+    def el_name(self, el):
+        if len(self._orientation) == 3:
+            names = ["x", "y", "z", "roll", "pitch", "yaw"]
+        else:
+            names = ["x", "y", "z", "qx", "qy", "qz", "qw"]
+        return names[el] 
 
     def __iter__(self):
-        return iter(self._position)
+        return iter(self.coordinates)
 
     def __next__(self):
-        return next(self._position)
+        return next(self.coordinates)
 
     def __len__(self):
-        return len(self._position)
+        return len(self.coordinates)
 
     def __eq__(self, other):
-        return self._position == other._position and self._orientation == other._orientation
+        return np.allclose(self._position, other._position) and np.allclose(self._orientation, other._orientation)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -567,4 +623,300 @@ class EndEffectorCoordinates:
     def __rshift__(self, other):
         return np.right_shift(self.coordinates, other.coordinates)
 
-   
+
+class LimbData:
+    @property
+    def empty(self):
+        return self._empty
+    
+    @property
+    def data_type(self):
+        return self._data_type
+    
+    @property
+    def config(self):
+        return list(self._data.keys())
+
+    def __init__(self, config, default_value=None, force_same_value_type=False):
+        """
+            Initializes a LimbData object with a given configuration of limbs.
+
+            Args:
+                config (list of tuples or str): A list of (ArmLeg, ArmLegSide) tuples specifying the limbs to configure,
+                    or a string representing a predefined configuration (e.g., "humanoid", "dual arm").
+                default_value (any, optional): The value to assign to each limb initially. Defaults to None.
+                force_same_value_type (bool, optional): If True, enforces that all values assigned to limbs
+                    must be of the same type as default_value. Raises a TypeError on mismatched assignments.
+
+            Raises:
+                ValueError: If force_same_value_type is True and default_value is None.
+        """
+        self._empty = True
+        if isinstance(config, str):
+            config = LimbData._predefined_config(config)
+
+        if force_same_value_type:
+            if default_value is None:
+                raise ValueError("Default value cannot be None if force_same_value_type is True.")
+            self._data_type = type(default_value)
+        else:
+            self._data_type = None
+
+        self._data = {}
+        for limb_type, side in config:
+            self.add_limb(limb_type, side, default_value)
+
+    def add_limb(self, limb_type, side, value):
+        self.check_data(value)
+        
+        self._data[(limb_type, side)] = value
+        self._empty = False
+
+    def add_limbs(self, config, value):
+        if isinstance(config, str):
+            config = LimbData._predefined_config(config)
+
+        if isinstance(value, list):
+            if len(value) != len(config):
+                raise ValueError("List of values should be the same length as the config list")
+            
+            for (limb_type, side), val in zip(config, value):
+                self.add_limb(limb_type, side, val)
+        else:
+            for limb_type, side in config:
+                self.add_limb(limb_type, side, value)
+
+    def check_data(self, value):
+        if self._data_type is not None and not isinstance(value, self._data_type):
+            raise TypeError(f"Value should be {self._data_type}, but {type(value)} has been received.")
+
+    def set(self, limb_type, side, value):
+        self.check_data(value)
+        
+        key = (limb_type, side)
+        if key not in self._data:
+            raise KeyError(f"Limb ({limb_type}, {side}) is not configured for this robot.")
+        self._data[key] = value
+
+    def get(self, limb_type, side):
+        key = (limb_type, side)
+        if key not in self._data:
+            raise KeyError(f"Limb ({limb_type}, {side}) is not configured for this robot.")
+        return self._data[key]
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple):
+            return self.get(*key)
+        elif isinstance(key, ArmLegSide):
+            limb_types = {limb for (limb, _) in self._data}
+            if len(limb_types) == 1:
+                only_limb = next(iter(limb_types))
+                return self.get(only_limb, key)
+            else:
+                raise ValueError(f"Ambiguous key: multiple limb types present, cannot infer type for side {key}")
+        else:
+            raise ValueError(f"Key is not valid: expected (limb, side) tuple or ArmLegSide, got {key}")
+        
+
+    def __setitem__(self, key, value):
+        """
+            Sets the value for one or more limbs in the LimbData instance, based on the key.
+
+            This method supports three types of keys:
+            - A tuple of (ArmLeg, ArmLegSide): directly sets the value for that specific limb.
+            - An ArmLegSide: sets the value for the limb with that side, but only if the instance has exactly one limb type.
+            - An ArmLeg: sets the value for all limbs of that type.
+
+            Args:
+                key (tuple, ArmLegSide, or ArmLeg): The limb identifier(s).
+                value (any): The value to set.
+
+            Raises:
+                ValueError: If the key is ambiguous or invalid, or if multiple limb types are present
+                            when using a side-only key.
+                TypeError: If force_same_value_type is True and value has the wrong type.
+        """
+        if isinstance(key, tuple):
+            self.set(*key, value)
+
+        elif isinstance(key, ArmLegSide):
+            limb_types = {limb for (limb, _) in self._data}
+            if len(limb_types) == 1:
+                only_limb = next(iter(limb_types))
+                self.set(only_limb, key, value)
+            else:
+                raise ValueError(f"Ambiguous key: multiple limb types present, cannot infer type for side {key}")
+        elif isinstance(key, ArmLeg):
+            self.set_all_of_type(key, value)
+
+        else:
+            raise ValueError(f"Key is not valid: expected (limb, side) tuple or ArmLegSide, got {key}")
+        
+    def set_all_of_type(self, limb_type: ArmLeg, value):
+        """
+            Updates all entries of the specified limb type to the given value.
+
+            Args:
+                limb_type (ArmLeg): The limb type to update (e.g., ArmLeg.ARM).
+                value (any): The value to assign.
+
+            Raises:
+                TypeError: If force_same_value_type is True and value has the wrong type.
+        """
+        # Enforce type consistency if needed
+        self.check_data(value)
+
+        for (limb, side) in self._data:
+            if limb == limb_type:
+                self._data[(limb, side)] = value
+
+        self._empty = False  # since we've populated some values
+
+    def first_value_of_type(self, limb_type: ArmLeg):
+        """
+            Returns the first value for a given limb type, regardless of side.
+
+            Args:
+                limb_type (ArmLeg): The limb type (e.g., ArmLeg.ARM).
+
+            Returns:
+                The value associated with the first limb of the specified type.
+
+            Raises:
+                KeyError: If there is no limb of the specified type.
+        """
+        for (limb, _), value in self._data.items():
+            if limb == limb_type:
+                return value
+        raise KeyError(f"No limb of type {limb_type} found.")
+
+
+    def __contains__(self, key):
+        return key in self._data
+    
+    def __iter__(self):
+        return iter(self._data)
+
+    def items(self):
+        return self._data.items()
+
+    def keys(self):
+        return self._data.keys()
+
+    def values(self):
+        return self._data.values()
+    
+    def __len__(self):
+        return len(self._data)
+    
+    def limb_count(self):
+        return len(self)
+    
+    def arm_count(self):
+        return self.count_limb_type(ArmLeg.ARM)
+
+    def leg_count(self):
+        return self.count_limb_type(ArmLeg.LEG)
+
+    def wheel_count(self):
+        return self.count_limb_type(ArmLeg.WHEEL)
+
+    def count_limb_type(self, limb_type: ArmLeg):
+        return sum(1 for limb, _ in self._data if limb == limb_type)
+    
+    def has_limb_type(self, limb_type: ArmLeg) -> bool:
+        """
+        Checks whether the specified limb type is present in the robot configuration.
+
+        Args:
+            limb_type (ArmLeg): The type of limb to check (e.g., ARM, LEG, WHEEL).
+
+        Returns:
+            bool: True if at least one limb of the given type is present, False otherwise.
+        """
+        return any(limb == limb_type for (limb, _) in self._data)
+    
+    def has_arm(self) -> bool:
+        return self.has_limb_type(ArmLeg.ARM)
+
+    def has_leg(self) -> bool:
+        return self.has_limb_type(ArmLeg.LEG)
+
+    def has_wheel(self) -> bool:
+        return self.has_limb_type(ArmLeg.WHEEL)
+    
+    def has_only_limb_type(self, limb_type: ArmLeg) -> bool:
+        """
+        Checks whether all limbs in the configuration are of the specified type.
+
+        Args:
+            limb_type (ArmLeg): The limb type to check against.
+
+        Returns:
+            bool: True if all configured limbs are of the given type, False otherwise.
+        """
+        return all(limb == limb_type for (limb, _) in self._data)
+    
+    def has_only_arms(self) -> bool:
+        return self.has_only_limb_type(ArmLeg.ARM)
+
+    def has_only_legs(self) -> bool:
+        return self.has_only_limb_type(ArmLeg.LEG)
+
+    def has_only_wheels(self) -> bool:
+        return self.has_only_limb_type(ArmLeg.WHEEL)
+    
+    @staticmethod
+    def _predefined_config(name: str):
+        name = name.strip().lower()        
+        if   name in ["single arm", "one arm"]:
+            config = [
+                (ArmLeg.ARM, ArmLegSide.NONE)
+            ]
+        elif name in ["dual arm", "two arms"]:
+            config = [
+                (ArmLeg.ARM, ArmLegSide.LEFT),
+                (ArmLeg.ARM, ArmLegSide.RIGHT)
+            ]
+        elif name == "dual arm wheeled":
+            config = [
+                (ArmLeg.ARM, ArmLegSide.LEFT),
+                (ArmLeg.ARM, ArmLegSide.RIGHT),
+                (ArmLeg.WHEEL, ArmLegSide.NONE)
+            ]
+        elif name in ["triple arm", "three arms"]:
+            config = [
+                (ArmLeg.ARM, ArmLegSide.LEFT),
+                (ArmLeg.ARM, ArmLegSide.RIGHT),
+                (ArmLeg.ARM, ArmLegSide.MIDDLE)
+            ]
+        elif name in ["quadruple arm", "four arms"]:
+            config = [
+                (ArmLeg.ARM, ArmLegSide.LEFT),
+                (ArmLeg.ARM, ArmLegSide.RIGHT),
+                (ArmLeg.ARM, ArmLegSide.LEFT2),
+                (ArmLeg.ARM, ArmLegSide.RIGHT2)
+            ]
+        elif name == "humanoid":
+            config = [
+                (ArmLeg.ARM, ArmLegSide.LEFT),
+                (ArmLeg.ARM, ArmLegSide.RIGHT),
+                (ArmLeg.LEG, ArmLegSide.LEFT),
+                (ArmLeg.LEG, ArmLegSide.RIGHT)
+            ]        
+        elif name in ["grievous", "four arms humanoid"]:
+            config = [
+                (ArmLeg.ARM, ArmLegSide.LEFT),
+                (ArmLeg.ARM, ArmLegSide.RIGHT),
+                (ArmLeg.ARM, ArmLegSide.LEFT2),
+                (ArmLeg.ARM, ArmLegSide.RIGHT2),
+                (ArmLeg.LEG, ArmLegSide.LEFT),
+                (ArmLeg.LEG, ArmLegSide.RIGHT)
+            ]
+        elif name == "empty":
+            config = [
+            ]
+        else:
+            raise ValueError(f"Robot configuration '{name}' is unknown. Valid options are: "
+                             "'humanoid', 'dual arm', 'dual arm wheeled', 'single arm', 'empty'.")
+        return config

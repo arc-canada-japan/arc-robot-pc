@@ -1,4 +1,5 @@
 from glob import glob
+from itertools import chain
 import os
 from setuptools import find_packages, setup
 
@@ -17,14 +18,16 @@ setup(
         # Include all config files.
         (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml'))),
         # Include all misc files.
-        (os.path.join('share', package_name, 'misc'), glob(os.path.join('misc', '*')))
+        (os.path.join('share', package_name, 'misc'), glob(os.path.join('misc', '*'))),
+        # Include all image files.
+        (os.path.join('share', package_name, 'image'), list(chain.from_iterable(glob(os.path.join('image', ext)) for ext in ('*.png', '*.jpg', '*.jpeg'))))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='yoshidalab',
+    maintainer='Yoshida Lab (Siméon Capy)',
     maintainer_email='contact@yoshidalab.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Package to define the communication method between the operator and the robot',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

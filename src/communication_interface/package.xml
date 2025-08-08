@@ -3,9 +3,9 @@
 <package format="3">
   <name>communication_interface</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="contact@yoshidalab.com">yoshidalab</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Package to define the communication method between the operator and the robot</description>
+  <maintainer email="simeon.capy@rs.tus.ac.jp">Yoshida Lab (Siméon Capy)</maintainer>
+  <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
