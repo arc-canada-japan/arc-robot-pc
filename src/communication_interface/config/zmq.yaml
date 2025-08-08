@@ -1,0 +1,7 @@
+/**:
+   ros__parameters:
+      host_ip: '127.0.0.1' # to replace by your server's IP
+      host_port: 80
+      protocol: 'ws'
+      ws_path_pub: '/rob2op_pub'
+      ws_path_sub: '/op2rob_sub'
