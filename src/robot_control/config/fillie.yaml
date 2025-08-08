@@ -1,7 +1,4 @@
 /**:
-   meta:
-      name: NEXTAGE Fillie
-      description: Semi-anthropomorphic robot with two arms
    ros__parameters:
       robot_arm_joints_number: 6 # Number of joints of the robot per arm
       robot_arm_number: 2 # Number of arms of the robot

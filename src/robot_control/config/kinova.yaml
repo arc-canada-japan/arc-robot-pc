@@ -1,7 +1,4 @@
 /**:
-   meta:
-      name: Kinova Gen 3
-      description: Robot arm with 6 DoFs
    ros__parameters:
       robot_arm_joints_number: 6 # Number of joints of the robot per arm
       robot_arm_number: 1 # Number of arms of the robot
