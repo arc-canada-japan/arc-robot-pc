@@ -36,7 +36,6 @@ class AbstractController(ABC, Node):
     
     @property # Number of joints of the arm of robot
     def ARM_JOINTS_NUMBER(self) -> int:
-        #return self.jav_home_pos.arm_joints_number
         return self.limbs_architecture.first_value_of_type(ct.ArmLeg.ARM)
     
     @property
@@ -45,12 +44,10 @@ class AbstractController(ABC, Node):
             Number of arms of the robot. 
             It can be 0, 1 (default) or 2.
         """
-        #return self.jav_home_pos.arm_limb_number
         return self.limbs_architecture.arm_count()
     
     @property # Number of joints of the leg of robot
     def LEG_JOINTS_NUMBER(self) -> int:
-        #return self.jav_home_pos.leg_joints_number
         return self.limbs_architecture.first_value_of_type(ct.ArmLeg.LEG)
     
     @property # Number of legs of the robot (-1, 0, 1 or 2)
@@ -59,7 +56,6 @@ class AbstractController(ABC, Node):
             Number of legs of the robot. 
             It can be -1 (wheeled), 0 (static, default), 1 (left or right leg) or 2 (both legs).
         """
-        #return self.jav_home_pos.leg_limb_number
         return self.limbs_architecture.leg_count()
 
     @property
@@ -75,7 +71,6 @@ class AbstractController(ABC, Node):
             Number of limbs (arm+leg) of the robot. 
             In case of wheel, it will be counted as one limb.
         """
-        #return self.ARM_NUMBER + (self.LEG_NUMBER if self.LEG_NUMBER != -1 else 1)
         return self.limbs_architecture.limb_count()
     
     @property # Communication interface used by the robot controller, defined by launch argument (return the name of the interface)
@@ -87,7 +82,6 @@ class AbstractController(ABC, Node):
     jav_home_pos = ct.JointAnglesValues()
     jav_current_pos = ct.JointAnglesValues()
 
-    eec_controller_pos = None
     eec_current_pos = None
 
     initialised = False
@@ -158,6 +152,8 @@ class AbstractController(ABC, Node):
             (where {arm_leg} is either 'arm' or 'leg')
 
         """
+        self.home_joint_angles_values = ct.LimbData(self.limb_config, default_value=[0.0], force_same_value_type=True)
+
         for arm_leg in {ct.ArmLeg.ARM, ct.ArmLeg.LEG}:
             limb_number = self.declare_and_get_ros_parameter(f'robot_{arm_leg.name.lower()}_number', (1 if arm_leg == ct.ArmLeg.ARM else 0))
             self.jav_home_pos.set_limb_number(arm_leg, limb_number)
@@ -210,12 +206,10 @@ class AbstractController(ABC, Node):
             else:
                 raise ValueError(f"The number of {arm_leg.name.lower()} should be in [0;4]")
 
-            self.activation_status.add_limbs(config, False) # CHANGED TO TRUE
+            self.activation_status.add_limbs(config, False)
             self.limbs_architecture.add_limbs(config,joint_number)
         self.limb_config = self.activation_status.config
         self.activation_status_has_changed = self.activation_status
-        #self.activation_status_has_changed[ct.ArmLegSide.LEFT] = False # ADDED
-        #self.activation_status_has_changed[ct.ArmLegSide.RIGHT] = False # ADDED
 
     # ROS Initialisation methods
     @abstractmethod
@@ -428,7 +422,7 @@ class AbstractController(ABC, Node):
         for limb, limb_val in position:
             for limb_side, limb_side_val in limb_val.items():
                 if limb_side_val is not None:
-                    self.move_robot(limb_side_val, limb, limb_side)
+                    self.move_robot(limb_side_val, False, limb, limb_side)
 
     @abstractmethod
     def set_init_position_to_current(self) -> None:

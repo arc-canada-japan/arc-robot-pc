@@ -24,12 +24,6 @@ class XarmController(AbstractController):
 
         self.set_ros_parameters()
 
-        self.TRANS_SPEED = 1 # mm/s
-        self.ROT_SPEED = 10 # r/min
-        self.ROT_SPEED = self.ROT_SPEED * ct.RPM_TO_DEG_S # conversion to °/s 
-        self.END_EFFECTOR_EPSILON = 3 # cm
-        self.MOVE_FACTOR = 1 # multiply the user's controller position by this factor to get the robot position
-
         # Setting the defaut values for the robot (since xArm is only one arm, the default values are for the left arm) to access the value simply with ".value"
         self.jav_home_pos.default_limb      = ct.ArmLeg.ARM
         self.jav_home_pos.default_side      = ct.ArmLegSide.LEFT
@@ -100,6 +94,8 @@ class XarmController(AbstractController):
         # Get the robot IP address from the parameter send by the launch file
         self.ip = self.declare_and_get_ros_parameter('robot_ip', '192.168.1.217')
         self.effector_offset = self.declare_and_get_ros_parameter('effector_offset', 0)
+        self.TRANS_SPEED = self.declare_and_get_ros_parameter('translation_speed', 1)
+        self.ROT_SPEED = self.declare_and_get_ros_parameter('rotation_speed', 10) * ct.RPM_TO_DEG_S # conversion to °/s 
     
     def emergency_stop_callback(self, msg):
         """
@@ -259,9 +255,7 @@ class XarmController(AbstractController):
                 pos_or_joint_values,
                 speed=self.TRANS_SPEED,
                 mvacc=50.0,
-            )   
-        
-        """             
+            )               
         else: # joint values
             self.get_logger().info(f"Moving joint of robot to: {pos_or_joint_values}")
             try:
@@ -276,7 +270,7 @@ class XarmController(AbstractController):
                 self.get_logger().error("Impossible to move the robot: " + e)
 
             self._communication_interface.publish("robot_joint_values", pos_or_joint_values)
-        """
+
         self.jav_current_pos[ct.ArmLeg.ARM] = self.arm.get_servo_angle(is_radian=False)[1][:self.ARM_JOINTS_NUMBER]
         self._communication_interface.publish("robot_joint_values", self._transform_robot_to_unity(self.jav_current_pos.value).tolist())
 
