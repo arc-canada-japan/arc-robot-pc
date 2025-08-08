@@ -16,7 +16,7 @@
       gain_left: 0.5
       gain_right: 0.5
       omit_orientation: True
-   paths: # Change those paths with your current installation setup
-      openrobot_path: "/opt/openrobots/lib/python3.10/site-packages"
-      krc_lib_path: "/opt/krc/lib"
-      nxapi_idl_path: "/opt/krc/lib/NxApiLib/idl_NxApi"
+      paths: # Change those paths with your current installation setup
+         openrobot_path: "/opt/openrobots/lib/python3.10/site-packages"
+         krc_lib_path: "/opt/krc/lib"
+         nxapi_idl_path: "/opt/krc/lib/NxApiLib/idl_NxApi"
