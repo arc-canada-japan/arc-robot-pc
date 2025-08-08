@@ -1,0 +1,79 @@
+robot_arm_joints_number: 
+  en: Number of joints of the robot per arm
+  fr: Nombre des articulations du robot pour chaque bras
+  ja: ロボットの腕あたりの関節数
+
+robot_arm_number: 
+  en: Number of arms of the robot
+  fr: Nombre de bras du robot
+  ja: ロボットの腕の数
+
+robot_ip: 
+  en: IP of the robot
+  fr: Adresse IP du robot
+  ja: ロボットのIPアドレス
+
+robot_speed:
+  en: Speed of the robot
+  fr: Vitesse du robot
+  ja: ロボットの速度
+
+robot_wait_queue_size:
+  en: Maximum size of the robot wait queue
+  fr: Taille maximale de la file d'attente du robot
+  ja: ロボットの待機キューの最大サイズ
+
+arm_robot_home_position: 
+  en: Origin of each joint of the robot in degrees
+  fr: Position d'origine de chaque articulation du robot (en degrés)
+  ja: ロボットの各関節の原点（度単位）
+
+mirrored:
+  en: Whether the robot arms are mirrored (horizontal axis)
+  fr: Indique si les bras du robot sont en miroir (axe horizontal)
+  ja: ロボットアームがミラー配置かどうか（横軸）
+
+control_source:
+  en: Control source of the robot
+  fr: Source de contrôle du robot
+  ja: ロボットの制御ソース
+
+use_hand:
+  en: Whether to use the robot hands
+  fr: Indique si les mains du robot sont utilisées
+  ja: ロボットのハンドを使用するかどうか
+
+limit_left:
+  en: Joint limits for the left arm (min and max for each joint, 6x2 matrix)
+  fr: Limites articulaires du bras gauche (min et max pour chaque articulation, matrice 6x2)
+  ja: 左腕の関節制限（各関節の最小値と最大値, 6x2マトリックス）
+
+limit_right:
+  en: Joint limits for the right arm (min and max for each joint, 6x2 matrix)
+  fr: Limites articulaires du bras droit (min et max pour chaque articulation, matrice 6x2)
+  ja: 右腕の関節制限（各関節の最小値と最大値, 6x2マトリックス）
+
+offset_left:
+  en: Offset values for the left arm joints in millimeters or degrees
+  fr: Valeurs de décalage pour les articulations du bras gauche (en millimètres ou degrés)
+  ja: 左腕の関節オフセット値（ミリメートルまたは度）
+
+offset_right:
+  en: Offset values for the right arm joints in millimeters or degrees
+  fr: Valeurs de décalage pour les articulations du bras droit (en millimètres ou degrés)
+  ja: 右腕の関節オフセット値（ミリメートルまたは度）
+
+gain_left:
+  en: Gain applied to the left arm
+  fr: Gain appliqué au bras gauche
+  ja: 左腕に適用されるゲイン
+
+gain_right:
+  en: Gain applied to the right arm
+  fr: Gain appliqué au bras droit
+  ja: 右腕に適用されるゲイン
+
+omit_orientation:
+  en: Whether to omit orientation control
+  fr: Indique si le contrôle de l'orientation est omis
+  ja: 姿勢制御を省略するかどうか

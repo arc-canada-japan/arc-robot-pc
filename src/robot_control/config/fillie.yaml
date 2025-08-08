@@ -1,8 +1,11 @@
 /**:
+   meta:
+      name: NEXTAGE Fillie
+      description: Semi-anthropomorphic robot with two arms
    ros__parameters:
       robot_arm_joints_number: 6 # Number of joints of the robot per arm
       robot_arm_number: 2 # Number of arms of the robot
-      robot_ip: '192.168.128.55' # IP of the robot bridge
+      robot_ip: '192.168.128.55' # IP of the robot
       robot_speed: 100
       robot_wait_queue_size: 2
       arm_robot_home_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # Origin of each joints of the robot in degrees
@@ -16,7 +19,7 @@
       gain_left: 0.5
       gain_right: 0.5
       omit_orientation: True
-   paths:
+   paths: # Change those paths with your current installation setup
       openrobot_path: "/opt/openrobots/lib/python3.10/site-packages"
       krc_lib_path: "/opt/krc/lib"
       nxapi_idl_path: "/opt/krc/lib/NxApiLib/idl_NxApi"
