@@ -3,9 +3,9 @@
 <package format="3">
   <name>robot_control</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="simeon.capy@rs.tus.ac.jp">Siméon Capy</maintainer>
-  <license>Apache-2.0</license>
+  <description>Main package of the ARC project, control the robot and call the other packages</description>
+  <maintainer email="simeon.capy@rs.tus.ac.jp">Yoshida Lab (Siméon Capy)</maintainer>
+  <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>

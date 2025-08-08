@@ -3,9 +3,9 @@
 <package format="3">
   <name>video_publisher</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="simeon.capy@rs.tus.ac.jp">Siméon Capy</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Package to define the video streaming protocol used between the operator and the robot</description>
+  <maintainer email="simeon.capy@rs.tus.ac.jp">Yoshida Lab (Siméon Capy)</maintainer>
+  <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>

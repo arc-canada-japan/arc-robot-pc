@@ -19,10 +19,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='simeon',
+    maintainer='Yoshida Lab (Siméon Capy)',
     maintainer_email='simeon.capy@rs.tus.ac.jp',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Package to define the video streaming protocol used between the operator and the robot',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

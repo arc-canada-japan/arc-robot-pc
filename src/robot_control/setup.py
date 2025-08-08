@@ -32,10 +32,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Siméon Capy',
+    maintainer='Yoshida Lab (Siméon Capy)',
     maintainer_email='simeon.capy@rs.tus.ac.jp',
-    description='TODO: Package description',
-    license='Apache-2.0',
+    description='Main package of the ARC project, control the robot and call the other packages',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': find_controllers(),
