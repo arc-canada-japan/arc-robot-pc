@@ -1,7 +1,12 @@
 /**:
+   meta:
+      name: Ufactory xArm 6
+      description: Robot arm with 6 DoFs
    ros__parameters:
       robot_arm_joints_number: 6 # Number of joints of the robot per arm
       robot_arm_number: 1 # Number of arms of the robot
       robot_ip: '192.168.1.217' # IP of the robot bridge
       arm_robot_home_position: [0.0, 20.0, -50.0, 0.0, 30.0, 0.0] # Origin of each joints of the robot in degrees
       effector_offset: 160 # Length of the end-effector in mm
+      translation_speed: 1 # mm/s
+      rotation_speed: 10 # r/min
