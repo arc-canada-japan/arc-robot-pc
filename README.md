@@ -1,5 +1,7 @@
 # ARC Project - Robot PC side
 
+/!\ README FILE WORK IN PROGRESS
+
 This framework is a part of the ARC project to create a platform for teleoperating robots on a wide scale. Even if the main goal of the ARC project is for caregiving, this framework is made adaptable to many situations.
 
 It is divided into several packages, and they are all in Python (but this is not a limitation, if a C++ package is required `_cpp` will be suffixed to its name). The packages have been built in order to be easily adaptable, e.g. for new devices, with few modifications (ideally just adding files). This repository is for the Robot PC, i.e. the PC connected to the robot, receiving the orders from the Operator PC. The code for this PC is in another repository: [ARC Operator PC Unity](https://github.com/arc-canada-japan/arc-operator-pc-unity) (not public yet).
