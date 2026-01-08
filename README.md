@@ -48,6 +48,10 @@ To add your own robot, streaming method or communication interface, please read 
 
 See [ARC GUI](https://github.com/arc-canada-japan/arc-gui)
 
+## Server Repository ##
+
+See [ARC Server](https://github.com/arc-canada-japan/arc-zmq-server).
+
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
